@@ -12,6 +12,33 @@ from pathlib import Path
 import tempfile
 
 class JiraAPI:
+
+    def transition_issue(self, issue_key: str, transition_name: str = "Done") -> None:
+        """
+        Transition a Jira issue to a new status by name (e.g., Done, In Progress, Backlog).
+        Args:
+            issue_key: The Jira issue key (e.g., 'PROJ-123').
+            transition_name: The name of the transition to perform (default: 'Done').
+        Raises:
+            Exception: If the transition fails or is not found.
+        """
+        # Get available transitions
+        url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+        resp = self.session.get(url)
+        self._handle_response(resp)
+        transitions = resp.json().get("transitions", [])
+        # Find the transition by name (case-insensitive)
+        transition = next((t for t in transitions if t["name"].lower() == transition_name.lower()), None)
+        if not transition:
+            available = ", ".join([t["name"] for t in transitions])
+            raise Exception(f"Transition '{transition_name}' not found for {issue_key}. Available: {available}")
+        transition_id = transition["id"]
+        # Perform the transition
+        post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+        data = {"transition": {"id": transition_id}}
+        post_resp = self.session.post(post_url, json=data)
+        self._handle_response(post_resp)
+        self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
     """
     A class to interact with the Jira REST API.
     Handles authentication, issue creation, sub-task creation, and error handling.
@@ -237,6 +264,37 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             issue_map[row["Created Issue ID"]] = row["Created Issue ID"]
             issue_map[summary_key] = row["Created Issue ID"]
 
+    # Expanded transition options: 6 choices
+    print("\nSelect a status transition mode for created issues:")
+    print("  1. Done (default, prompt for each issue)")
+    print("  2. In Progress (prompt for each issue)")
+    print("  3. Backlog (prompt for each issue)")
+    print("  4. Done All (all issues will be marked as Done, no further prompts)")
+    print("  5. In Progress All (all issues will be marked as In Progress, no further prompts)")
+    print("  6. Backlog All (all issues will be marked as Backlog, no further prompts)")
+    mode_choice = input("Choose [1-6] or press Enter for default: ").strip()
+    if mode_choice == "4":
+        transition_mode = "all"
+        transition_all_status = "Done"
+        transition_default = "Done"
+    elif mode_choice == "5":
+        transition_mode = "all"
+        transition_all_status = "In Progress"
+        transition_default = "In Progress"
+    elif mode_choice == "6":
+        transition_mode = "all"
+        transition_all_status = "Backlog"
+        transition_default = "Backlog"
+    elif mode_choice == "2":
+        transition_mode = "prompt"
+        transition_default = "In Progress"
+    elif mode_choice == "3":
+        transition_mode = "prompt"
+        transition_default = "Backlog"
+    else:
+        transition_mode = "prompt"
+        transition_default = "Done"
+
     # Create all top-level issues (Story, Task, etc.)
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
@@ -265,6 +323,36 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         all_rows[idx]["Created Issue ID"] = issue_key
 
         # === Post-creation updates for all issue types ===
+
+        # Transition logic
+        if transition_mode == "all":
+            try:
+                jira.transition_issue(issue_key, transition_all_status)
+            except Exception as e:
+                logger.warning(f"Could not transition {issue_key} to '{transition_all_status}': {e}")
+        elif transition_mode == "prompt":
+            print(f"\nSelect a status transition for {issue_key} (default: {transition_default}):")
+            print(f"  1. {transition_default} (default)")
+            print("  2. In Progress")
+            print("  3. Backlog")
+            print("  4. Enter custom transition name")
+            print("  5. Skip status transition for this issue")
+            choice = input("Choose [1-5] or press Enter for default: ").strip()
+            if choice == "2":
+                transition_name = "In Progress"
+            elif choice == "3":
+                transition_name = "Backlog"
+            elif choice == "4":
+                transition_name = input("Enter custom transition name: ").strip() or transition_default
+            elif choice == "5":
+                transition_name = None
+            else:
+                transition_name = transition_default
+            if transition_name:
+                try:
+                    jira.transition_issue(issue_key, transition_name)
+                except Exception as e:
+                    logger.warning(f"Could not transition {issue_key} to '{transition_name}': {e}")
         # 1. Story Points (for all issue types and sub-tasks if allowed)
         allow_update_sp = True
         if issue_type.lower() == "sub-task" and field_mapping and isinstance(field_mapping, dict):
@@ -384,6 +472,36 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         all_rows[idx]["Created Issue ID"] = subtask_key
 
         # === Post-creation updates for sub-tasks ===
+
+        # Transition logic for sub-tasks
+        if transition_mode == "all":
+            try:
+                jira.transition_issue(subtask_key, transition_all_status)
+            except Exception as e:
+                logger.warning(f"Could not transition sub-task {subtask_key} to '{transition_all_status}': {e}")
+        elif transition_mode == "prompt":
+            print(f"\nSelect a status transition for sub-task {subtask_key} (default: {transition_default}):")
+            print(f"  1. {transition_default} (default)")
+            print("  2. In Progress")
+            print("  3. Backlog")
+            print("  4. Enter custom transition name")
+            print("  5. Skip status transition for this sub-task")
+            choice = input("Choose [1-5] or press Enter for default: ").strip()
+            if choice == "2":
+                transition_name = "In Progress"
+            elif choice == "3":
+                transition_name = "Backlog"
+            elif choice == "4":
+                transition_name = input("Enter custom transition name: ").strip() or transition_default
+            elif choice == "5":
+                transition_name = None
+            else:
+                transition_name = transition_default
+            if transition_name:
+                try:
+                    jira.transition_issue(subtask_key, transition_name)
+                except Exception as e:
+                    logger.warning(f"Could not transition sub-task {subtask_key} to '{transition_name}': {e}")
         # 1. Story Points (if allowed)
         if allow_sp_on_subtasks and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
