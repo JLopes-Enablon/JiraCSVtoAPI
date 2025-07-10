@@ -214,6 +214,10 @@ if __name__ == "__main__":
                     continue
                 # Clean up row values
                 row = {k.replace('\ufeff', '').strip(): (v.strip() if v else '') for k, v in row.items()}
+                # Robustly map 'Subject' to 'Summary' if needed
+                if 'Summary' not in row and 'Subject' in row:
+                    row['Summary'] = row['Subject']
+                    del row['Subject']
                 if not any(row.values()):
                     continue
                 # Exclude cancelled/out-of-office events

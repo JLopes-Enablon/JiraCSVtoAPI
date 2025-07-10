@@ -373,7 +373,13 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         logger.info(f"Created {issue_type}: {issue_key}")
         all_rows[idx]["Created Issue ID"] = issue_key
 
-    # Create all sub-tasks, linking to their parent issues
+    # Option: allow sending Story Points/custom fields to sub-tasks if configured
+    # This option is controlled by the field mapping: 'Allow Story Points on Sub-tasks' (default: False)
+    # If enabled, Story Points and custom fields will be sent to sub-tasks; otherwise, they are omitted for compatibility.
+    allow_sp_on_subtasks = False
+    if field_mapping and isinstance(field_mapping, dict):
+        allow_sp_on_subtasks = field_mapping.get('Allow Story Points on Sub-tasks', False)
+
     for idx, row in subtasks:
         parent_ref = (row["Parent"] or "").strip()
         # Try to find the parent by key or summary (case-insensitive)
@@ -387,30 +393,32 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             except Exception as e:
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
-        # Only set Story Points if the field is mapped and present for this issue type
+
+        # Optionally set Story Points/custom fields for sub-tasks if allowed
+        # If not allowed, these fields are omitted for sub-tasks (Jira default behavior)
         sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
         sp_value = row.get("Story Points")
-        sp_update = {}
-        if sp_field and sp_value is not None and str(sp_value).strip() != "":
+        subtask_fields = {}
+        if allow_sp_on_subtasks and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
                 with open("jira_fields.json", "r", encoding="utf-8") as f:
                     fields_json = json.load(f)
                 if any(f['id'] == sp_field for f in fields_json):
-                    sp_update[sp_field] = float(sp_value)
+                    subtask_fields[sp_field] = float(sp_value)
             except Exception:
                 pass
-        # Create the sub-task in Jira
+        # If not allowed, ensure story_points=None for sub-tasks
         subtask = jira.create_subtask(
             project_key=row["Project"],
             summary=(row["Summary"] or "").strip(),
             parent_key=parent_key,
             assignee=assignee_env,
             start_date=row.get("Start Date"),
-            story_points=None,  # handled below
+            story_points=float(sp_value) if allow_sp_on_subtasks and sp_value not in (None, "") else None,
             original_estimate=row.get("Original Estimate"),
             time_spent=row.get("Time spent"),
             priority=row.get("Priority"),
-            **sp_update
+            **subtask_fields
         )
         logger.info(f"Created sub-task: {subtask['key']} under {parent_key}")
         all_rows[idx]["Created Issue ID"] = subtask["key"]
@@ -521,6 +529,7 @@ if __name__ == "__main__":
     field_mapping = {
         'Story Points': 'customfield_10037',
         'Actual Start': 'customfield_10008',
+        'Allow Story Points on Sub-tasks': False,  # New option, default False
     }
     print("\nWould you like to review and optionally update Jira custom field mappings? (Recommended if you see field errors)")
     print("1. Yes, review and update field mapping\n2. No, use current mapping")
@@ -529,10 +538,16 @@ if __name__ == "__main__":
         # Use a temp file to communicate mapping
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             tf_path = tf.name
+            # Write current mapping including the new option
+            json.dump(field_mapping, tf, indent=2)
+            tf.flush()
         subprocess.run([sys.executable, "field_check.py", tf_path])
         try:
             with open(tf_path, "r", encoding="utf-8") as f:
                 field_mapping = json.load(f)
+            # Ensure the new option is present (default to False if missing)
+            if 'Allow Story Points on Sub-tasks' not in field_mapping:
+                field_mapping['Allow Story Points on Sub-tasks'] = False
             print(f"Using field mapping: {field_mapping}")
         except Exception:
             print("Warning: Could not parse updated field mapping. Using defaults.")
