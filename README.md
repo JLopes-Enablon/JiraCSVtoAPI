@@ -1,7 +1,6 @@
-
 ---
 
-# JiraCSVviaAPI-1 (V1.24)
+# JiraCSVviaAPI-1 (V1.25)
 
 A robust, interactive Python workflow to process Outlook calendar CSV exports for Jira import.
 
@@ -32,6 +31,9 @@ A robust, interactive Python workflow to process Outlook calendar CSV exports fo
   - Logs API errors, skipped sub-tasks, and all outgoing payloads.
 - **Jira Field Metadata:**
   - Fetches all Jira field metadata and saves to `jira_fields.json` before import for debugging and mapping.
+**Jira Field Mapping Review:**
+  - Interactive review and update of custom field mappings (e.g., Story Points, Actual Start) before import.
+  - Prompts you to confirm or change the Jira field IDs for each mapped field, using live metadata from your Jira instance.
 
 ## Getting Started
 1. **Install dependencies:**
@@ -75,7 +77,34 @@ A robust, interactive Python workflow to process Outlook calendar CSV exports fo
 - `.env` is updated automatically and should be kept secure.
 
 ## Version
-- **V1.24** — All features above are active and working as of this version.
+- **V1.25** — All features above are active and working as of this version.
+
+## Required .env Variables & How to Obtain Them in Jira
+
+The script will prompt for these variables on first run and save them to `.env`:
+
+- `JIRA_URL` — Your Jira Cloud instance URL (e.g., `https://your-domain.atlassian.net`)
+- `JIRA_EMAIL` — Your Jira user email (the one used to log in to Jira Cloud)
+- `JIRA_TOKEN` — Your Jira API token (see below)
+- `JIRA_ASSIGNEE` — (Optional) Jira username or account ID for the assignee (see below)
+
+### How to get your Jira API token
+1. Go to [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+2. Click **Create API token**
+3. Name your token and click **Create**
+4. Copy the token and use it when prompted for `JIRA_TOKEN`
+
+### How to get your Jira accountId (for assignee)
+1. In Jira Cloud, go to **People** or your user profile
+2. Click on the user you want to assign issues to
+3. The URL will look like `.../people/712020:e78e154e-5582-4c59-9e72-0df53ed664af` — the part after `/people/` is the `accountId`
+4. Use this value for `JIRA_ASSIGNEE` when prompted (or leave blank to assign manually)
+
+### How to get your Jira Cloud URL
+1. Log in to Jira in your browser
+2. The URL in the address bar (e.g., `https://your-domain.atlassian.net`) is your `JIRA_URL`
+
+The script will prompt for any missing variables and save them to `.env` for future runs.
 
 ---
 *This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability and error handling.*

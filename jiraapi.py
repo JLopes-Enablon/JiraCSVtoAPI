@@ -1,4 +1,3 @@
-
 import requests
 import os
 import csv
@@ -6,6 +5,11 @@ import logging
 import re
 from dotenv import load_dotenv
 from typing import Any, Dict, Optional
+# Field mapping utility
+import subprocess
+import json
+from pathlib import Path
+import tempfile
 
 class JiraAPI:
     """
@@ -68,8 +72,10 @@ class JiraAPI:
         }
         if assignee:
             fields_dict["assignee"] = {"name": assignee}
-        # Only set fields that are safe to set on create
-        fields_dict.update(fields)
+        # Only set fields that are safe to set on create (exclude custom fields like Story Points)
+        # Remove custom fields (those starting with 'customfield_') from fields before updating
+        safe_fields = {k: v for k, v in fields.items() if not k.startswith('customfield_')}
+        fields_dict.update(safe_fields)
         data = {"fields": fields_dict}
         self.logger.info(f"Creating issue in project {project_key} with summary '{summary}'")
         self.logger.debug(f"Payload for issue creation: {data}")
@@ -79,23 +85,27 @@ class JiraAPI:
         self.logger.info(f"Created issue: {issue_key} in project {project_key}")
 
 
-        # Post-creation field updates (Actual start, Story Points, Original Estimate, Assignee)
-        # 1. Actual start date (customfield_10008)
-        actual_start_date = None
+        # Post-creation field updates (Start Date, Story Points, Original Estimate, Assignee)
+        # 1. Start Date (customfield_10015 or mapped field)
+        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
+        # Allow override from field_mapping if available
+        if hasattr(self, 'field_mapping') and self.field_mapping:
+            start_date_field = self.field_mapping.get('Start Date', start_date_field)
+        start_date_value = None
         if start_date:
             date_str = str(start_date).strip()
             if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-                actual_start_date = date_str
+                start_date_value = date_str
             else:
-                self.logger.warning(f"Start Date '{start_date}' is not in 'YYYY-MM-DD' format. Not updating Actual start date field.")
-        if actual_start_date and issue_key != "<unknown>":
+                self.logger.warning(f"Start Date '{start_date}' is not in 'YYYY-MM-DD' format. Not updating Start Date field.")
+        if start_date_value and issue_key != "<unknown>":
             update_url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
-            update_data = {"fields": {"customfield_10008": actual_start_date}}
-            self.logger.info(f"Updating Actual start date for {issue_key} to {actual_start_date}")
-            self.logger.debug(f"Payload for Actual start update: {update_data}")
+            update_data = {"fields": {start_date_field: start_date_value}}
+            self.logger.info(f"Updating Start Date field ({start_date_field}) for {issue_key} to {start_date_value}")
+            self.logger.debug(f"Payload for Start Date update: {update_data}")
             update_response = self.session.put(update_url, json=update_data)
             self._handle_response(update_response)
-            self.logger.info(f"Updated Actual start date for {issue_key}")
+            self.logger.info(f"Updated Start Date field ({start_date_field}) for {issue_key}")
 
         # 1b. Always update assignee after creation (guaranteed assignment)
         assignee_accountid = os.getenv("JIRA_ASSIGNEE_ACCOUNTID")
@@ -109,13 +119,19 @@ class JiraAPI:
         update_fields = {}
         # Convert story_points to a number if possible, else skip
         sp_value = None
+        # Only update custom fields after creation
+        for k, v in fields.items():
+            if k.startswith('customfield_') and v is not None and str(v).strip() != "":
+                try:
+                    update_fields[k] = float(v)
+                except Exception:
+                    update_fields[k] = v
         if story_points is not None and str(story_points).strip() != "":
             try:
                 sp_value = float(story_points)
+                update_fields["customfield_10037"] = sp_value
             except Exception:
                 self.logger.warning(f"Story Points value '{story_points}' is not a valid number. Skipping.")
-        if sp_value is not None:
-            update_fields["customfield_10037"] = sp_value
         if original_estimate:
             update_fields["timetracking"] = {"originalEstimate": original_estimate}
         if update_fields and issue_key != "<unknown>":
@@ -275,7 +291,7 @@ class JiraAPI:
 
 
 
-def import_stories_and_subtasks(csv_path: str, jira: JiraAPI) -> None:
+def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None) -> None:
     """
     Import stories and sub-tasks from a CSV file into Jira.
     Expects CSV with columns: Project, Summary, IssueType, Parent, Start Date, Story Points, Original Estimate, Time spent, Priority.
@@ -285,6 +301,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI) -> None:
     Args:
         csv_path: Path to the CSV file.
         jira: JiraAPI instance.
+        field_mapping: dict of {system_field: custom_field_id}
     """
     logger = logging.getLogger("JiraImport")
     assignee_env = os.getenv("JIRA_ASSIGNEE")
@@ -323,16 +340,31 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI) -> None:
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
+        # Only set Story Points if the field is mapped and present for this issue type
+        sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
+        actual_start_field = field_mapping.get('Actual Start', 'customfield_10008') if field_mapping else 'customfield_10008'
+        # Check if field is present in jira_fields.json (best effort)
+        sp_value = row.get("Story Points")
+        sp_update = {}
+        if sp_field and sp_value is not None and str(sp_value).strip() != "":
+            try:
+                with open("jira_fields.json", "r", encoding="utf-8") as f:
+                    fields_json = json.load(f)
+                if any(f['id'] == sp_field for f in fields_json):
+                    sp_update[sp_field] = float(sp_value)
+            except Exception:
+                pass
         # Create the issue in Jira, now passing story_points and original_estimate
         issue = jira.create_issue(
             project_key=row["Project"],
             summary=summary_clean,
             issue_type=issue_type,
             start_date=row.get("Start Date"),
-            story_points=row.get("Story Points"),
+            story_points=None,  # handled below
             original_estimate=row.get("Original Estimate"),
             time_spent=row.get("Time spent"),
-            assignee=assignee_env
+            assignee=assignee_env,
+            **sp_update
         )
         issue_key = issue["key"]
         # Add the new issue to the map for parent lookup
@@ -355,6 +387,18 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI) -> None:
             except Exception as e:
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
+        # Only set Story Points if the field is mapped and present for this issue type
+        sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
+        sp_value = row.get("Story Points")
+        sp_update = {}
+        if sp_field and sp_value is not None and str(sp_value).strip() != "":
+            try:
+                with open("jira_fields.json", "r", encoding="utf-8") as f:
+                    fields_json = json.load(f)
+                if any(f['id'] == sp_field for f in fields_json):
+                    sp_update[sp_field] = float(sp_value)
+            except Exception:
+                pass
         # Create the sub-task in Jira
         subtask = jira.create_subtask(
             project_key=row["Project"],
@@ -362,10 +406,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI) -> None:
             parent_key=parent_key,
             assignee=assignee_env,
             start_date=row.get("Start Date"),
-            story_points=row.get("Story Points"),
+            story_points=None,  # handled below
             original_estimate=row.get("Original Estimate"),
             time_spent=row.get("Time spent"),
-            priority=row.get("Priority")
+            priority=row.get("Priority"),
+            **sp_update
         )
         logger.info(f"Created sub-task: {subtask['key']} under {parent_key}")
         all_rows[idx]["Created Issue ID"] = subtask["key"]
@@ -422,6 +467,7 @@ if __name__ == "__main__":
     JIRA_TOKEN = prompt_env_var("JIRA_TOKEN", "Enter your Jira API token", secret=True)
     JIRA_ASSIGNEE = prompt_env_var("JIRA_ASSIGNEE", "Enter Jira assignee username or account ID (optional)", default="")
 
+
     # Prompt for source CSV
     print("\nEnter the path to your Outlook CSV export (e.g. Testconv.csv):")
     while True:
@@ -469,6 +515,29 @@ if __name__ == "__main__":
     if proceed != 'yes':
         print("Aborted. No changes made to Jira.")
         sys.exit(0)
+    import_path = str(output_csv)
+
+    # === FIELD MAPPING REVIEW ===
+    field_mapping = {
+        'Story Points': 'customfield_10037',
+        'Actual Start': 'customfield_10008',
+    }
+    print("\nWould you like to review and optionally update Jira custom field mappings? (Recommended if you see field errors)")
+    print("1. Yes, review and update field mapping\n2. No, use current mapping")
+    field_check_choice = input("Enter 1 or 2: ").strip()
+    if field_check_choice == "1":
+        # Use a temp file to communicate mapping
+        with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+            tf_path = tf.name
+        subprocess.run([sys.executable, "field_check.py", tf_path])
+        try:
+            with open(tf_path, "r", encoding="utf-8") as f:
+                field_mapping = json.load(f)
+            print(f"Using field mapping: {field_mapping}")
+        except Exception:
+            print("Warning: Could not parse updated field mapping. Using defaults.")
+    else:
+        print(f"Using default field mapping: {field_mapping}")
 
     # Set env vars for this process
     os.environ["JIRA_URL"] = JIRA_URL
@@ -489,6 +558,6 @@ if __name__ == "__main__":
     )
     jira = JiraAPI(JIRA_URL, JIRA_EMAIL, JIRA_TOKEN)
     try:
-        import_stories_and_subtasks(str(output_csv), jira)
+        import_stories_and_subtasks(import_path, jira, field_mapping=field_mapping)
     except Exception as e:
         logging.getLogger("JiraImport").error(f"Error: {e}")

@@ -43,8 +43,10 @@ def remove_quotes_and_fix_dates(input_csv, temp_csv):
         lines = infile.readlines()
         if not lines:
             return
-        # Remove quotes and strip whitespace from header and write
-        header = ','.join([h.strip() for h in lines[0].replace('"', '').strip().split(',')])
+        # Remove quotes and strip whitespace from header, and rename 'Subject' to 'Summary' before writing
+        header_fields = [h.strip() for h in lines[0].replace('"', '').strip().split(',')]
+        header_fields = ["Summary" if h == "Subject" else h for h in header_fields]
+        header = ','.join(header_fields)
         outfile.write(header + '\n')
         # Find the index of the Start Date column
         header_fields = [h.strip() for h in header.strip().split(',')]
