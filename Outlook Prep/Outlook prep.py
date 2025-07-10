@@ -43,8 +43,10 @@ def remove_quotes_and_fix_dates(input_csv, temp_csv):
         lines = infile.readlines()
         if not lines:
             return
-        # Remove quotes and strip whitespace from header and write
-        header = ','.join([h.strip() for h in lines[0].replace('"', '').strip().split(',')])
+        # Remove quotes and strip whitespace from header, and rename 'Subject' to 'Summary' before writing
+        header_fields = [h.strip() for h in lines[0].replace('"', '').strip().split(',')]
+        header_fields = ["Summary" if h == "Subject" else h for h in header_fields]
+        header = ','.join(header_fields)
         outfile.write(header + '\n')
         # Find the index of the Start Date column
         header_fields = [h.strip() for h in header.strip().split(',')]
@@ -146,8 +148,24 @@ if __name__ == "__main__":
     import shutil
     # Prompt user for Jira Project ID, Issue Type, and Parent field options
     print("\n=== Outlook Prep Automation ===\n")
-    # Prompt for Project ID (required)
+    # Load Project ID from .env if available
+    import sys
     project_id = ""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('JIRA_PROJECT_ID'):
+                        # Support both export and non-export formats
+                        val = line.split('=', 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            project_id = val
+                            print(f"JIRA_PROJECT_ID loaded from .env: {project_id}")
+                            break
+        except Exception as e:
+            print(f"Warning: Could not read .env for Project ID: {e}")
+    # Prompt for Project ID only if not found in .env
     while not project_id:
         project_id = input("Enter the Jira Project ID (e.g., PROJ): ").strip()
         if not project_id:
@@ -212,6 +230,10 @@ if __name__ == "__main__":
                     continue
                 # Clean up row values
                 row = {k.replace('\ufeff', '').strip(): (v.strip() if v else '') for k, v in row.items()}
+                # Robustly map 'Subject' to 'Summary' if needed
+                if 'Summary' not in row and 'Subject' in row:
+                    row['Summary'] = row['Subject']
+                    del row['Subject']
                 if not any(row.values()):
                     continue
                 # Exclude cancelled/out-of-office events

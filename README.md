@@ -1,51 +1,20 @@
 
+# JiraCSVviaAPI-1 — Stable Release v1.30
+
+**Bulk import Outlook calendar events into Jira Cloud with robust field mapping, idempotent import, and full logging.**
+
 ---
 
-# JiraCSVviaAPI-1 (V1.24)
-
-A robust, interactive Python workflow to process Outlook calendar CSV exports for Jira import.
-
-## Features
-- **Automated CSV Cleaning & Reformatting:**
-  - Cleans and normalizes Outlook CSVs for Jira import.
-  - Excludes cancelled/out-of-office events.
-  - Calculates Story Points from event durations.
-- **Interactive User Prompts:**
-  - Prompts for Jira Project ID, Issue Type, and Parent ID during CSV prep.
-  - Auto-populates fields as needed.
-- **Output & Idempotency:**
-  - Always generates `output.csv` in the project root.
-  - Only processes rows without a `Created Issue ID` (idempotent import).
-  - Appends all processed rows to `tracker.csv` for persistent tracking.
-- **Jira Import Automation:**
-  - Imports Epics, Stories, Tasks, and Sub-tasks from CSV.
-  - Handles correct parent/epic linkage for stories and sub-tasks.
-  - Supports any top-level Jira issue type.
-  - Maps and updates date fields (Start Date, Actual Start) in Jira issues.
-  - Sends Story Points as a number (float) to Jira.
-  - Handles Original Estimate and Time Spent fields, using the Jira Worklog API for time tracking.
-  - Updates fields post-creation (e.g., Story Points, Original Estimate, Actual Start Date, Assignee) using additional API calls for accuracy.
-  - Sub-task parent lookup supports both Jira key and summary (case-insensitive), with fallback to Jira API if not found in the CSV.
-  - Uses `.env` variables for configuration, set interactively if missing.
-  - All main Jira operations are encapsulated in the `JiraAPI` class, which provides methods for issue creation, sub-task creation, work logging, and error handling.
-  - The script is idempotent: it updates the CSV with created issue IDs and persists all processed rows in `tracker.csv` for auditability.
-  - Supports logging work (time spent) on issues and sub-tasks via the Jira Worklog API.
-  - Provides robust error handling and logging for all API interactions.
-  - Logs all Jira API requests and responses for troubleshooting.
-- **.env Integration:**
-  - Loads sensitive variables from `.env` and prompts for missing ones, saving them for future runs.
-- **Robust Logging & Error Handling:**
-  - All logging output is written to both console and `error.log`.
-  - Logs API errors, skipped sub-tasks, and all outgoing payloads.
-- **Jira Field Metadata:**
-  - Fetches all Jira field metadata and saves to `jira_fields.json` before import for debugging and mapping.
-
 ## Getting Started
+
 1. **Install dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
+
 2. **Run the workflow:**
+
    ```bash
    python jiraapi.py
    ```
@@ -53,77 +22,143 @@ A robust, interactive Python workflow to process Outlook calendar CSV exports fo
    - Review `output.csv` when prompted, then confirm to proceed with import.
 
 3. **CSV Format:**
-   Your CSV should have these columns:
-   ```csv
 
-   Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Time spent,Priority,Created Issue ID
+   Your Outlook CSV export should have these columns:
+
+   ```csv
+   Subject,Start Date,Start Time,End Time
    ```
+   - The script will automatically rename `Subject` to `Summary` and add all required Jira columns during processing.
    - The script will prompt for missing/required fields during prep.
    - For sub-tasks, set `Parent` to the Jira key (e.g., `PROJ-123`) or summary of the parent story.
    - Only rows without a `Created Issue ID` will be imported.
 
-## Files
-- `jiraapi.py` — Main workflow, interactive, idempotent, logs API calls, .env integration, time tracking and worklog enabled.
--   - Contains the `JiraAPI` class with methods:
-      - `get_issue(issue_key)`: Retrieve a Jira issue by key.
-      - `create_issue(...)`: Create a new Jira issue with support for custom fields, story points, estimates, and assignee.
-      - `create_subtask(...)`: Create a sub-task under a parent issue, with parent lookup by key or summary.
-      - `log_work(issue_key, time_spent, comment)`: Log work (time spent) on an issue or sub-task.
-      - All methods include robust error handling and logging.
-- `Outlook Prep/Outlook prep.py` — CSV prep script, interactive, well-commented.
+---
+
+## Features & Workflow
+
+**1. CSV Preparation & Input**
+   - Robust normalization, header mapping, and exclusion logic for Outlook exports.
+   - Interactive prompts for required fields and CSV path.
+   - Automatic renaming of `Subject` to `Summary` and addition of required Jira columns.
+
+**2. Jira Field Metadata Fetch**
+   - Fetches Jira field metadata (`jira_fields.json`) before import for field mapping and debugging.
+
+**3. .env Variable Management**
+   - Interactive prompts for Jira fields and .env variables, with persistent saving.
+   - Project ID is a persistent .env variable and never double-prompts.
+
+**4. Field Mapping Review**
+   - Interactive utility to review and update Jira custom field mappings before import.
+
+**5. Idempotent Import**
+   - Only new rows (without Created Issue ID) are processed, ensuring safe re-runs.
+
+**6. Resolution Status Management & Autoclose**
+   - At the start of import, choose how to set the Resolution/Status for all created issues and sub-tasks:
+     - **Prompt for each issue:** Done (default), In Progress, Backlog, or custom transition per issue.
+     - **All issues auto-transitioned:** Done All, In Progress All, or Backlog All (no further prompts).
+   - The "All" options apply the selected status to all issues and sub-tasks without further prompts.
+
+**7. Jira API Integration**
+   - Imports Epics, Stories, Tasks, and Sub-tasks from CSV.
+   - Handles parent/epic linkage for stories and sub-tasks.
+   - Updates Story Points, assignee, Start Date, Time Spent, and Parent after creation for all issue types (including sub-tasks).
+   - Sub-task logic robustly supports Story Points and time tracking (with clear toggles).
+
+**8. Logging & Tracking**
+   - Persistent logging to `tracker.csv` and `error.log`.
+   - All API interactions, payloads, and errors are logged for full traceability and troubleshooting.
+   - All outgoing payloads and responses are logged for debugging.
+
+**9. Workflow Flexibility**
+   - Supports advanced and basic workflows.
+   - .gitignore rules to exclude generated/log files.
+
+---
+
+
+---
+
+## Story Points on Sub-tasks
+
+By default, Story Points are updated for ALL issue types, including sub-tasks. To turn OFF Story Points for sub-tasks:
+
+1. Open `jiraapi.py` and find:
+
+   ```python
+   allow_sp_on_subtasks = True  # <--- DEFAULT: Story Points are updated for sub-tasks
+   # To turn OFF Story Points for sub-tasks, change the above line to:
+   # allow_sp_on_subtasks = False
+   ```
+2. Change `allow_sp_on_subtasks = True` to `allow_sp_on_subtasks = False` and save the file.
+
+You can also control this via the field mapping review utility by setting the `Allow Story Points on Sub-tasks` option when prompted.
+
+---
+
+
+## Files, Logging & Security
+
+- `jiraapi.py` — Main workflow: interactive, idempotent, logs API calls, .env integration, time tracking and worklog enabled, Start Date update after creation, robust error handling, and field mapping review. All stale code removed and fully commented.
+- `Outlook Prep/Outlook prep.py` — CSV prep script: interactive, auto-renames headers, normalizes dates, excludes unwanted events, prompts for Jira fields, and generates output.csv. Fully commented.
+- `field_check.py` — Interactive field mapping review utility, lets you review and update Jira custom field mappings before import.
 - `requirements.txt` — Python dependencies (`requests`, `python-dotenv`).
 - `output.csv` — Output file, always in project root, includes Created Issue ID.
 - `tracker.csv` — Persistent log of all imported issues.
-- `jira_fields.json` — Auto-fetched Jira field metadata.
-- `error.log` — All logging output.
+- `jira_fields.json` — Auto-fetched Jira field metadata for field mapping and debugging.
+- `error.log` — All logging output (console + file).
 - `.env` — Auto-updated with sensitive variables (created on first run).
 
-## Logging & Troubleshooting
-- All actions, API requests, and errors are logged to both console and `error.log`.
+**Logging & Troubleshooting:**
+- All actions, API requests, and errors are logged to both console and `error.log` for persistent troubleshooting.
 - Worklog (Time Spent) API calls are logged with full request/response details.
+- All outgoing payloads and responses are logged for debugging.
 - If you encounter issues, check `error.log` for details.
 
-## Environment Variables
-- The following variables are required and will be prompted for if missing:
-  - `JIRA_URL`: Your Jira instance URL (e.g., https://your-domain.atlassian.net)
-  - `JIRA_EMAIL`: Your Jira user email
-  - `JIRA_TOKEN`: Your Jira API token
-  - `JIRA_ASSIGNEE`: (Optional) Default assignee username or account ID
-- All variables are stored in `.env` for future runs.
-
-### How to Obtain Required Environment Variables from Jira
-
-- **JIRA_URL**: This is the base URL of your Jira Cloud instance. You can find it in your browser's address bar when logged into Jira (e.g., `https://your-domain.atlassian.net`).
-
-- **JIRA_EMAIL**: Use the email address associated with your Jira account (the one you use to log in).
-
-- **JIRA_TOKEN**: This is a personal API token, not your password. To generate one:
-  1. Go to [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
-  2. Click **Create API token**.
-  3. Give it a label (e.g., "JiraCSVtoAPI") and click **Create**.
-  4. Copy the generated token and use it when prompted by the script.
-  5. For more details, see [Atlassian's API token documentation](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
-
-- **JIRA_ASSIGNEE** (optional): This can be either the Jira username or the account ID of the user to assign issues to by default.
-  - For Jira Cloud, account IDs are recommended. To find an account ID:
-    1. Go to **Jira Settings > User Management > Users**.
-    2. Click on the user and look for the account ID in the URL (e.g., `.../users/view?accountId=abc123...`).
-    3. Alternatively, use the [Jira REST API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-users/#api-rest-api-3-user-search-get) to search for users and get their accountId.
-
-All variables will be saved to your `.env` file after the first run for convenience and security.
-
-## Advanced Details
-- The script updates certain fields (e.g., Story Points, Original Estimate, Actual Start Date, Assignee) after issue creation to ensure compatibility with Jira field requirements.
-- Sub-task parent lookup is robust: it matches by key or summary (case-insensitive) and will attempt to fetch the parent from Jira if not found in the CSV.
-- The script is designed to be idempotent and safe for repeated runs: only rows without a `Created Issue ID` are processed, and all processed rows are appended to `tracker.csv` for persistent tracking.
-- All main Jira operations are encapsulated in the `JiraAPI` class for maintainability and reuse.
-
-## Security
+**Security:**
 - Credentials and sensitive variables are loaded from `.env` and only prompted for if missing.
 - `.env` is updated automatically and should be kept secure.
-
-## Version
-- **V1.24** — All features above are active and working as of this version.
+- Assignee logic supports Jira Cloud accountId for compatibility.
 
 ---
-*This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability and error handling.*
+
+## Version
+
+- **V1.30 (Stable)** — Resolution Status Management expanded: Now supports 6 options (Done, In Progress, Backlog, Done All, In Progress All, Backlog All) for status/transition selection. The "All" options apply the selected status to all issues and sub-tasks without further prompts. All other features from v1.29 retained. This is a stable release.
+
+---
+
+## Required .env Variables & How to Obtain Them in Jira
+
+The script will prompt for these variables on first run and save them to `.env`:
+
+- `JIRA_URL` — Your Jira Cloud instance URL (e.g., `https://your-domain.atlassian.net`)
+- `JIRA_EMAIL` — Your Jira user email (the one used to log in to Jira Cloud)
+- `JIRA_TOKEN` — Your Jira API token (see below)
+- `JIRA_ASSIGNEE` — (Optional) Jira username or account ID for the assignee (see below)
+
+### How to get your Jira API token
+1. Go to [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+2. Click **Create API token**
+3. Name your token and click **Create**
+4. Copy the token and use it when prompted for `JIRA_TOKEN`
+
+### How to get your Jira accountId (for assignee)
+1. In Jira Cloud, go to **People** or your user profile
+2. Click on the user you want to assign issues to
+3. The URL will look like `.../people/712020:e78e154e-5582-4c59-9e72-0df53ed664af` — the part after `/people/` is the `accountId`
+4. Use this value for `JIRA_ASSIGNEE` when prompted (or leave blank to assign manually)
+
+### How to get your Jira Cloud URL
+1. Log in to Jira in your browser
+2. The URL in the address bar (e.g., `https://your-domain.atlassian.net`) is your `JIRA_URL`
+
+The script will prompt for any missing variables and save them to `.env` for future runs.
+
+## Version
+- **V1.30 (Stable)** — Resolution Status Management expanded: Now supports 6 options (Done, In Progress, Backlog, Done All, In Progress All, Backlog All) for status/transition selection. The "All" options apply the selected status to all issues and sub-tasks without further prompts. All other features from v1.29 retained. This is a stable release.
+
+---
+*This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability, error handling, and a fully maintainable, production-ready codebase.*

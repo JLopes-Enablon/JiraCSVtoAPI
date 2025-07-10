@@ -9,3 +9,4 @@ output.csv
 tracker.csv
 error.log
 jira_fields.json
+jiraapi_basic.py
