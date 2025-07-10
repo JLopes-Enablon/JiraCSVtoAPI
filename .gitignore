@@ -1,0 +1,11 @@
+.venv/
+.venv-1/
+.env
+__pycache__/
+*.pyc
+
+# Ignore output and log files
+output.csv
+tracker.csv
+error.log
+jira_fields.json
