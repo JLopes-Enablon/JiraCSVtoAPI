@@ -1,44 +1,71 @@
+# JiraCSVviaAPI-1 — Stable Release v1.28
+
+**Bulk import Outlook calendar events into Jira Cloud with robust field mapping, idempotent import, and full logging.**
+
 ---
 
-# JiraCSVviaAPI-1 (V1.26)
+**Features:**
+- Imports Epics, Stories, Tasks, and Sub-tasks from CSV
+- Handles parent/epic linkage for stories and sub-tasks
+- Robust CSV normalization, header mapping, and exclusion logic
+- Interactive prompts for Jira fields and .env variables, with persistent saving
+- Idempotent import (only new rows processed)
+- Persistent logging to `tracker.csv` and `error.log`
+- Fetches Jira field metadata (`jira_fields.json`) before import
+- Supports advanced and basic workflows
+- Updates Story Points, assignee, Start Date, Time Spent, and Parent after creation for all issue types (including sub-tasks)
+- Project ID is a persistent .env variable
+- Interactive field mapping review utility
+- All API interactions and payloads are logged for troubleshooting
+- .gitignore rules to exclude generated/log files
+- **NEW in v1.28:**
+    - All stale/legacy code fully removed from all scripts for a clean, maintainable codebase.
+    - All scripts are now fully commented for clarity and maintainability.
+    - README updated with all features, options, and usage instructions.
+    - Project flagged as **stable** and ready for production use.
+    - Story Points, assignee, Start Date, Time Spent, and Parent are always updated after creation for all issue types (including sub-tasks).
+    - Project ID is a persistent .env variable and never double-prompts.
+    - Sub-task logic robustly supports Story Points and time tracking (with clear toggles).
+    - All API interactions, payloads, and errors are logged for full traceability.
+    - This release is flagged as **stable**.
 
-A robust, interactive Python workflow to process Outlook calendar CSV exports for Jira import.
+---
 
-## Features
-- **Automated CSV Cleaning & Reformatting:**
-  - Cleans and normalizes Outlook CSVs for Jira import, including renaming the `Subject` column to `Summary` automatically.
-  - Excludes cancelled, declined, and out-of-office events.
-  - Calculates Story Points from event durations.
-  - Normalizes date formats to `YYYY-MM-DD`.
-- **Interactive User Prompts:**
-  - Prompts for Jira Project ID, Issue Type, and Parent ID during CSV prep.
-  - Optionally auto-populates the Parent field for all entries.
-  - Prompts for missing .env variables and saves them for future runs.
-- **Output & Idempotency:**
-  - Always generates `output.csv` in the project root, ready for import.
-  - Only processes rows without a `Created Issue ID` (idempotent import).
-  - Appends all processed rows to `tracker.csv` for persistent tracking.
-- **Jira Import Automation:**
-  - Imports Epics, Stories, Tasks, and Sub-tasks from CSV.
-  - Handles correct parent/epic linkage for stories and sub-tasks.
-  - Supports any top-level Jira issue type.
-  - Updates the Start Date field (customfield_10015, or as mapped) after issue creation for all new issues (not just Actual Start).
-  - Sends Story Points as a number (float) to Jira.
-  - Handles Original Estimate and Time Spent fields, using the Jira Worklog API for time tracking.
-  - Logs all Jira API requests and responses for troubleshooting, including outgoing payloads and responses.
-- **.env Integration:**
-  - Loads sensitive variables from `.env` and prompts for missing ones, saving them for future runs.
-  - Assignee logic supports Jira Cloud accountId.
-- **Robust Logging & Error Handling:**
-  - All logging output is written to both console and `error.log` for full traceability.
-  - Logs API errors, skipped sub-tasks, and all outgoing payloads.
-- **Jira Field Metadata:**
-  - Fetches all Jira field metadata and saves to `jira_fields.json` before import for debugging and mapping.
-- **Jira Field Mapping Review:**
-  - Interactive review and update of custom field mappings (e.g., Story Points, Start Date, Actual Start) before import.
-  - Prompts you to confirm or change the Jira field IDs for each mapped field, using live metadata from your Jira instance.
-  - Supports mapping Start Date to any custom field.
-  - **NEW:** Optionally allow Story Points and custom fields to be sent to sub-tasks (default: off, can be enabled in field mapping review step). This supports Jira instances that permit Story Points on sub-tasks.
+## Functionality Overview
+
+This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability and error handling. Key features include:
+
+- **CSV Preparation:** Robust normalization, header mapping, and exclusion logic for Outlook exports. Interactive prompts for required fields.
+- **Field Mapping Review:** Interactive utility to review and update Jira custom field mappings before import.
+- **Idempotent Import:** Only new rows (without Created Issue ID) are processed, ensuring safe re-runs.
+- **Jira API Integration:** All issue types supported, with post-creation updates for Story Points, assignee, Start Date, Time Spent, and Parent.
+- **Logging:** All API calls, errors, and actions are logged to both console and `error.log`.
+- **.env Integration:** All sensitive variables are loaded from `.env` and only prompted for if missing.
+- **Persistent Tracking:** All processed rows are appended to `tracker.csv` for auditability.
+  - **NEW:** Story Points, assignee, Start Date, Time Spent, and Parent are always updated after creation for all issue types (including sub-tasks). Project ID is persistent and never double-prompts. All stale code removed and scripts fully commented.
+### Story Points on Sub-tasks
+
+**By default, Story Points are now updated for ALL issue types, including sub-tasks.**
+
+If you want to turn OFF Story Points for sub-tasks (for compatibility with your Jira board):
+
+1. Open `jiraapi.py` and find the following section in the `import_stories_and_subtasks` function:
+
+    ```python
+    allow_sp_on_subtasks = True  # <--- DEFAULT: Story Points are updated for sub-tasks
+    # To turn OFF Story Points for sub-tasks, change the above line to:
+    # allow_sp_on_subtasks = False
+    ```
+
+2. Change `allow_sp_on_subtasks = True` to `allow_sp_on_subtasks = False` and save the file.
+
+**Advanced Option:**
+
+If you want to control this via the field mapping review utility, you can uncomment the code in `jiraapi.py` as described in the comments, or set the `Allow Story Points on Sub-tasks` option in the field mapping review utility when prompted.
+
+---
+
+---
 
 ## Getting Started
 1. **Install dependencies:**
@@ -63,8 +90,9 @@ A robust, interactive Python workflow to process Outlook calendar CSV exports fo
    - Only rows without a `Created Issue ID` will be imported.
 
 ## Files
-- `jiraapi.py` — Main workflow: interactive, idempotent, logs API calls, .env integration, time tracking and worklog enabled, Start Date update after creation, robust error handling, and field mapping review.
-- `Outlook Prep/Outlook prep.py` — CSV prep script: interactive, auto-renames headers, normalizes dates, excludes unwanted events, prompts for Jira fields, and generates output.csv.
+- `jiraapi.py` — Main workflow: interactive, idempotent, logs API calls, .env integration, time tracking and worklog enabled, Start Date update after creation, robust error handling, and field mapping review. All stale code removed and fully commented.
+- `Outlook Prep/Outlook prep.py` — CSV prep script: interactive, auto-renames headers, normalizes dates, excludes unwanted events, prompts for Jira fields, and generates output.csv. Fully commented.
+- `field_check.py` — Interactive field mapping review utility, lets you review and update Jira custom field mappings before import.
 - `requirements.txt` — Python dependencies (`requests`, `python-dotenv`).
 - `output.csv` — Output file, always in project root, includes Created Issue ID.
 - `tracker.csv` — Persistent log of all imported issues.
@@ -84,7 +112,7 @@ A robust, interactive Python workflow to process Outlook calendar CSV exports fo
 - Assignee logic supports Jira Cloud accountId for compatibility.
 
 ## Version
-- **V1.26** — Adds option to allow Story Points/custom fields on sub-tasks (configurable in field mapping review). All other features above are active and working as of this version, including Start Date post-creation update, header normalization, and robust field mapping review.
+- **V1.28 (Stable)** — All stale/legacy code removed, all scripts fully commented, README updated, and all features robustly supported. Story Points, assignee, Start Date, Time Spent, and Parent are always updated after creation for all issue types (including sub-tasks). Project ID is persistent and never double-prompts. This is a stable release.
 
 ## Required .env Variables & How to Obtain Them in Jira
 
@@ -114,4 +142,4 @@ The script will prompt for these variables on first run and save them to `.env`:
 The script will prompt for any missing variables and save them to `.env` for future runs.
 
 ---
-*This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability and error handling.*
+*This project enables secure, robust, and idempotent bulk import of Outlook calendar events into Jira, with full traceability, error handling, and a fully maintainable, production-ready codebase.*

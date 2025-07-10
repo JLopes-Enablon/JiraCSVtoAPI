@@ -148,8 +148,24 @@ if __name__ == "__main__":
     import shutil
     # Prompt user for Jira Project ID, Issue Type, and Parent field options
     print("\n=== Outlook Prep Automation ===\n")
-    # Prompt for Project ID (required)
+    # Load Project ID from .env if available
+    import sys
     project_id = ""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip().startswith('JIRA_PROJECT_ID'):
+                        # Support both export and non-export formats
+                        val = line.split('=', 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            project_id = val
+                            print(f"JIRA_PROJECT_ID loaded from .env: {project_id}")
+                            break
+        except Exception as e:
+            print(f"Warning: Could not read .env for Project ID: {e}")
+    # Prompt for Project ID only if not found in .env
     while not project_id:
         project_id = input("Enter the Jira Project ID (e.g., PROJ): ").strip()
         if not project_id:

@@ -18,9 +18,6 @@ class JiraAPI:
     """
     def __init__(self, base_url: str, email: str, api_token: str) -> None:
         """
-        Initialize the JiraAPI client and set up logging.
-        """
-        """
         Initialize the JiraAPI client.
         Args:
             base_url: The base URL of the Jira instance.
@@ -50,20 +47,20 @@ class JiraAPI:
         self.logger.info(f"Fetched issue: {issue_key}")
         return response.json()
 
-    def create_issue(self, project_key: str, summary: str, issue_type: str = "Story", story_points: Optional[Any] = None, original_estimate: Optional[Any] = None, time_spent: Optional[Any] = None, start_date: Optional[str] = None, assignee: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
+    def create_issue(self, project_key: str, summary: str, issue_type: str = "Story", assignee: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
         """
-        Create a new Jira issue.
+        Create a new Jira issue with only safe fields (custom fields are handled post-creation).
         Args:
             project_key: The Jira project key.
             summary: The summary/title of the issue.
             issue_type: The type of issue (default: 'Story').
+            assignee: (Optional) Assignee username (for legacy Jira only).
             **fields: Additional fields for the issue.
         Returns:
             The created issue data as a dictionary.
         Raises:
             Exception: If the API call fails.
         """
-
         url = f"{self.base_url}/rest/api/3/issue"
         fields_dict = {
             "project": {"key": project_key},
@@ -73,7 +70,6 @@ class JiraAPI:
         if assignee:
             fields_dict["assignee"] = {"name": assignee}
         # Only set fields that are safe to set on create (exclude custom fields like Story Points)
-        # Remove custom fields (those starting with 'customfield_') from fields before updating
         safe_fields = {k: v for k, v in fields.items() if not k.startswith('customfield_')}
         fields_dict.update(safe_fields)
         data = {"fields": fields_dict}
@@ -83,86 +79,27 @@ class JiraAPI:
         self._handle_response(response)
         issue_key = response.json().get("key", "<unknown>")
         self.logger.info(f"Created issue: {issue_key} in project {project_key}")
-
-
-        # Post-creation field updates (Start Date, Story Points, Original Estimate, Assignee)
-        # 1. Start Date (customfield_10015 or mapped field)
-        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
-        # Allow override from field_mapping if available
-        if hasattr(self, 'field_mapping') and self.field_mapping:
-            start_date_field = self.field_mapping.get('Start Date', start_date_field)
-        start_date_value = None
-        if start_date:
-            date_str = str(start_date).strip()
-            if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-                start_date_value = date_str
-            else:
-                self.logger.warning(f"Start Date '{start_date}' is not in 'YYYY-MM-DD' format. Not updating Start Date field.")
-        if start_date_value and issue_key != "<unknown>":
-            update_url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
-            update_data = {"fields": {start_date_field: start_date_value}}
-            self.logger.info(f"Updating Start Date field ({start_date_field}) for {issue_key} to {start_date_value}")
-            self.logger.debug(f"Payload for Start Date update: {update_data}")
-            update_response = self.session.put(update_url, json=update_data)
-            self._handle_response(update_response)
-            self.logger.info(f"Updated Start Date field ({start_date_field}) for {issue_key}")
-
-        # 1b. Always update assignee after creation (guaranteed assignment)
-        assignee_accountid = os.getenv("JIRA_ASSIGNEE_ACCOUNTID")
-        if issue_key != "<unknown>":
-            if assignee_accountid:
-                self._update_assignee(issue_key, account_id=assignee_accountid)
-            elif assignee:
-                self._update_assignee(issue_key, name=assignee)
-
-        # 2. Story Points (customfield_10037) and Original Estimate (timetracking)
-        update_fields = {}
-        # Convert story_points to a number if possible, else skip
-        sp_value = None
-        # Only update custom fields after creation
-        for k, v in fields.items():
-            if k.startswith('customfield_') and v is not None and str(v).strip() != "":
-                try:
-                    update_fields[k] = float(v)
-                except Exception:
-                    update_fields[k] = v
-        if story_points is not None and str(story_points).strip() != "":
-            try:
-                sp_value = float(story_points)
-                update_fields["customfield_10037"] = sp_value
-            except Exception:
-                self.logger.warning(f"Story Points value '{story_points}' is not a valid number. Skipping.")
-        if original_estimate:
-            update_fields["timetracking"] = {"originalEstimate": original_estimate}
-        if update_fields and issue_key != "<unknown>":
-            update_url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
-            update_data = {"fields": update_fields}
-            self.logger.info(f"Updating Story Points/Original Estimate for {issue_key}")
-            self.logger.debug(f"Payload for Story Points/Original Estimate update: {update_data}")
-            update_response = self.session.put(update_url, json=update_data)
-            self._handle_response(update_response)
-            self.logger.info(f"Updated Story Points/Original Estimate for {issue_key}")
-
-        # 3. Log work (Time Spent) if provided and valid
-        ts_value = None
-        if time_spent is not None and str(time_spent).strip() != "":
-            ts_value = str(time_spent).strip()
-        if ts_value and issue_key != "<unknown>":
-            self.log_work(issue_key, ts_value)
-
         return response.json()
 
     def _update_assignee(self, issue_key: str, account_id: Optional[str] = None, name: Optional[str] = None) -> None:
         """
-        Helper to update the assignee of an issue by accountId or name.
+        Helper to update the assignee of an issue by accountId (Jira Cloud) or name (Jira Server/DC).
+        Always uses 'id' if the value looks like an accountId (contains a colon or is a UUID).
         """
         update_url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
+        update_data = None
         if account_id:
+            # Use 'id' for Jira Cloud (accountId)
             update_data = {"fields": {"assignee": {"id": account_id}}}
             self.logger.info(f"Updating assignee for {issue_key} to accountId {account_id}")
         elif name:
-            update_data = {"fields": {"assignee": {"name": name}}}
-            self.logger.info(f"Updating assignee for {issue_key} to {name}")
+            # If the name looks like an accountId, use 'id' instead
+            if ":" in name or (len(name) >= 32 and all(c in '0123456789abcdef-' for c in name.replace(':','').replace('-',''))):
+                update_data = {"fields": {"assignee": {"id": name}}}
+                self.logger.info(f"Updating assignee for {issue_key} to accountId {name} (detected by format)")
+            else:
+                update_data = {"fields": {"assignee": {"name": name}}}
+                self.logger.info(f"Updating assignee for {issue_key} to username {name}")
         else:
             self.logger.warning(f"No assignee info provided for {issue_key}. Skipping assignee update.")
             return
@@ -199,25 +136,16 @@ class JiraAPI:
         summary: str,
         parent_key: str,
         assignee: Optional[str] = None,
-        start_date: Optional[str] = None,
-        # story_points and timetracking fields are ignored for sub-tasks by default
-        story_points: Optional[Any] = None,
-        original_estimate: Optional[Any] = None,
-        time_spent: Optional[Any] = None,
         priority: Optional[str] = None,
         **fields: Any
     ) -> Dict[str, Any]:
         """
-        Create a Jira sub-task under a parent issue.
+        Create a Jira sub-task under a parent issue. Only safe fields are set on creation.
         Args:
             project_key: The Jira project key.
             summary: The summary/title of the sub-task.
             parent_key: The key of the parent story.
-            assignee: (Optional) Assignee username.
-            start_date: (Optional) Start date for the sub-task.
-            story_points: (Optional) Story points value.
-            original_estimate: (Optional) Original time estimate.
-            time_spent: (Optional) Time spent value.
+            assignee: (Optional) Assignee username (for legacy Jira only).
             priority: (Optional) Priority name.
             **fields: Additional fields for the sub-task.
         Returns:
@@ -234,47 +162,17 @@ class JiraAPI:
         }
         if assignee:
             subtask_fields["assignee"] = {"name": assignee}
-        # Do NOT set customfield_10015 (Start Date) for sub-tasks unless it is on the sub-task create screen in Jira
-        # if start_date and <your condition for sub-tasks>:
-        #     subtask_fields["customfield_10015"] = start_date
-        # Enable timetracking fields for sub-tasks if provided (but NOT timeSpent)
-        if original_estimate:
-            subtask_fields["timetracking"] = {"originalEstimate": original_estimate}
         if priority:
             subtask_fields["priority"] = {"name": priority}
-        subtask_fields.update(fields)
+        # Only set safe fields (exclude custom fields)
+        safe_fields = {k: v for k, v in fields.items() if not k.startswith('customfield_')}
+        subtask_fields.update(safe_fields)
         data = {"fields": subtask_fields}
         self.logger.debug(f"Creating sub-task under parent {parent_key} in project {project_key} with summary '{summary}'")
         response = self.session.post(url, json=data)
         self._handle_response(response)
         subtask_key = response.json().get("key", "<unknown>")
         self.logger.info(f"Created sub-task: {subtask_key} under parent {parent_key}")
-
-        # Update Actual start date (customfield_10008) for sub-tasks after creation, if start_date is valid
-        actual_start_date = None
-        if start_date:
-            import re
-            date_str = str(start_date).strip()
-            if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-                actual_start_date = date_str
-            else:
-                self.logger.warning(f"Start Date '{start_date}' is not in 'YYYY-MM-DD' format. Not updating Actual start date field.")
-        if actual_start_date and subtask_key != "<unknown>":
-            update_url = f"{self.base_url}/rest/api/3/issue/{subtask_key}"
-            update_data = {"fields": {"customfield_10008": actual_start_date}}
-            self.logger.info(f"Updating Actual start date for {subtask_key} to {actual_start_date}")
-            self.logger.debug(f"Payload for Actual start update: {update_data}")
-            update_response = self.session.put(update_url, json=update_data)
-            self._handle_response(update_response)
-            self.logger.info(f"Updated Actual start date for {subtask_key}")
-
-        # Log work (Time Spent) if provided and valid
-        ts_value = None
-        if time_spent is not None and str(time_spent).strip() != "":
-            ts_value = str(time_spent).strip()
-        if ts_value and subtask_key != "<unknown>":
-            self.log_work(subtask_key, ts_value)
-
         return response.json()
 
     def _handle_response(self, response: requests.Response) -> None:
@@ -288,6 +186,8 @@ class JiraAPI:
         if not response.ok:
             self.logger.error(f"Jira API error: {response.status_code} {response.text}")
             raise Exception(f"Jira API error: {response.status_code} {response.text}")
+
+# End of JiraAPI class
 
 
 
@@ -305,6 +205,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     """
     logger = logging.getLogger("JiraImport")
     assignee_env = os.getenv("JIRA_ASSIGNEE")
+    project_id_env = os.getenv("JIRA_PROJECT_ID")
 
     # Prepare lists for processing
     top_level_issues = []  # List of (idx, row) for non-sub-task issues
@@ -340,31 +241,21 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
-        # Only set Story Points if the field is mapped and present for this issue type
         sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
-        actual_start_field = field_mapping.get('Actual Start', 'customfield_10008') if field_mapping else 'customfield_10008'
-        # Check if field is present in jira_fields.json (best effort)
         sp_value = row.get("Story Points")
-        sp_update = {}
-        if sp_field and sp_value is not None and str(sp_value).strip() != "":
-            try:
-                with open("jira_fields.json", "r", encoding="utf-8") as f:
-                    fields_json = json.load(f)
-                if any(f['id'] == sp_field for f in fields_json):
-                    sp_update[sp_field] = float(sp_value)
-            except Exception:
-                pass
-        # Create the issue in Jira, now passing story_points and original_estimate
+        # Use project from .env if available, else from CSV, and save to .env if not set
+        project_val = project_id_env or row["Project"]
+        if not project_id_env:
+            from dotenv import set_key
+            env_path = Path(__file__).parent / '.env'
+            set_key(str(env_path), "JIRA_PROJECT_ID", project_val)
+            project_id_env = project_val
+        # Create the issue in Jira (minimal fields)
         issue = jira.create_issue(
-            project_key=row["Project"],
+            project_key=project_val,
             summary=summary_clean,
             issue_type=issue_type,
-            start_date=row.get("Start Date"),
-            story_points=None,  # handled below
-            original_estimate=row.get("Original Estimate"),
-            time_spent=row.get("Time spent"),
-            assignee=assignee_env,
-            **sp_update
+            assignee=None
         )
         issue_key = issue["key"]
         # Add the new issue to the map for parent lookup
@@ -373,12 +264,95 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         logger.info(f"Created {issue_type}: {issue_key}")
         all_rows[idx]["Created Issue ID"] = issue_key
 
-    # Option: allow sending Story Points/custom fields to sub-tasks if configured
-    # This option is controlled by the field mapping: 'Allow Story Points on Sub-tasks' (default: False)
-    # If enabled, Story Points and custom fields will be sent to sub-tasks; otherwise, they are omitted for compatibility.
-    allow_sp_on_subtasks = False
-    if field_mapping and isinstance(field_mapping, dict):
-        allow_sp_on_subtasks = field_mapping.get('Allow Story Points on Sub-tasks', False)
+        # === Post-creation updates for all issue types ===
+        # 1. Story Points (for all issue types and sub-tasks if allowed)
+        allow_update_sp = True
+        if issue_type.lower() == "sub-task" and field_mapping and isinstance(field_mapping, dict):
+            allow_update_sp = field_mapping.get('Allow Story Points on Sub-tasks', False)
+        if allow_update_sp and sp_field and sp_value is not None and str(sp_value).strip() != "":
+            try:
+                with open("jira_fields.json", "r", encoding="utf-8") as f:
+                    fields_json = json.load(f)
+                if any(f['id'] == sp_field for f in fields_json):
+                    update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                    update_data = {"fields": {sp_field: float(sp_value)}}
+                    jira.session.put(update_url, json=update_data)
+                    logger.info(f"Updated Story Points for {issue_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Story Points for {issue_key}: {e}")
+        # 2. Original Estimate (timetracking)
+        original_estimate = row.get("Original Estimate")
+        if original_estimate and str(original_estimate).strip() != "":
+            try:
+                update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
+                jira.session.put(update_url, json=update_data)
+                logger.info(f"Updated Original Estimate for {issue_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Original Estimate for {issue_key}: {e}")
+        # 3. Start Date
+        start_date = row.get("Start Date")
+        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
+        if field_mapping and isinstance(field_mapping, dict):
+            start_date_field = field_mapping.get('Start Date', start_date_field)
+        if start_date and re.match(r"^\d{4}-\d{2}-\d{2}$", str(start_date).strip()):
+            try:
+                update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                update_data = {"fields": {start_date_field: str(start_date).strip()}}
+                jira.session.put(update_url, json=update_data)
+                logger.info(f"Updated Start Date for {issue_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Start Date for {issue_key}: {e}")
+        # 4. Assignee (always update after creation)
+        # --- Assignee update: always use accountId if available, fallback to name ---
+        assignee_accountid = os.getenv("JIRA_ASSIGNEE_ACCOUNTID")
+        if assignee_accountid:
+            try:
+                jira._update_assignee(issue_key, account_id=assignee_accountid)
+            except Exception as e:
+                logger.warning(f"Could not update assignee for {issue_key}: {e}")
+        elif assignee_env:
+            try:
+                jira._update_assignee(issue_key, name=assignee_env)
+            except Exception as e:
+                logger.warning(f"Could not update assignee for {issue_key}: {e}")
+        # 5. Time Spent
+        time_spent = row.get("Time spent")
+        if time_spent and str(time_spent).strip() != "":
+            try:
+                jira.log_work(issue_key, str(time_spent).strip())
+                logger.info(f"Logged work for {issue_key}")
+            except Exception as e:
+                logger.warning(f"Could not log work for {issue_key}: {e}")
+        # 6. Parent (for Stories, if specified)
+        parent_ref = (row.get("Parent") or "").strip()
+        if parent_ref:
+            try:
+                parent_key = issue_map.get(parent_ref) or issue_map.get(parent_ref.lower())
+                if not parent_key:
+                    parent_issue = jira.get_issue(parent_ref)
+                    parent_key = parent_issue.get("key")
+                if parent_key:
+                    update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                    update_data = {"fields": {"parent": {"key": parent_key}}}
+                    jira.session.put(update_url, json=update_data)
+                    logger.info(f"Linked parent {parent_key} to {issue_key}")
+            except Exception as e:
+                logger.warning(f"Could not set parent for {issue_key}: {e}")
+
+    # === Story Points for Sub-tasks: ALWAYS ENABLED by default ===
+    # By default, Story Points will be updated for ALL issue types, including sub-tasks.
+    #
+    # To disable Story Points for sub-tasks, set the following variable to False.
+    #
+    #    allow_sp_on_subtasks = False
+    #
+    # Or, to control this via the field mapping config (advanced):
+    #    if field_mapping and isinstance(field_mapping, dict):
+    #        allow_sp_on_subtasks = field_mapping.get('Allow Story Points on Sub-tasks', True)
+    #
+    # If you want to expose this as a user option, see the README for instructions.
+    allow_sp_on_subtasks = True  # <--- DEFAULT: Story Points are updated for sub-tasks
 
     for idx, row in subtasks:
         parent_ref = (row["Parent"] or "").strip()
@@ -394,34 +368,93 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
 
-        # Optionally set Story Points/custom fields for sub-tasks if allowed
-        # If not allowed, these fields are omitted for sub-tasks (Jira default behavior)
         sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
         sp_value = row.get("Story Points")
-        subtask_fields = {}
+        # Use project from .env if available, else from CSV
+        project_val = project_id_env or row["Project"]
+        # Always create the sub-task with minimal fields
+        subtask = jira.create_subtask(
+            project_key=project_val,
+            summary=(row["Summary"] or "").strip(),
+            parent_key=parent_key,
+            assignee=None
+        )
+        subtask_key = subtask["key"]
+        logger.info(f"Created sub-task: {subtask_key} under {parent_key}")
+        all_rows[idx]["Created Issue ID"] = subtask_key
+
+        # === Post-creation updates for sub-tasks ===
+        # 1. Story Points (if allowed)
         if allow_sp_on_subtasks and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
                 with open("jira_fields.json", "r", encoding="utf-8") as f:
                     fields_json = json.load(f)
                 if any(f['id'] == sp_field for f in fields_json):
-                    subtask_fields[sp_field] = float(sp_value)
-            except Exception:
-                pass
-        # If not allowed, ensure story_points=None for sub-tasks
-        subtask = jira.create_subtask(
-            project_key=row["Project"],
-            summary=(row["Summary"] or "").strip(),
-            parent_key=parent_key,
-            assignee=assignee_env,
-            start_date=row.get("Start Date"),
-            story_points=float(sp_value) if allow_sp_on_subtasks and sp_value not in (None, "") else None,
-            original_estimate=row.get("Original Estimate"),
-            time_spent=row.get("Time spent"),
-            priority=row.get("Priority"),
-            **subtask_fields
-        )
-        logger.info(f"Created sub-task: {subtask['key']} under {parent_key}")
-        all_rows[idx]["Created Issue ID"] = subtask["key"]
+                    update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
+                    update_data = {"fields": {sp_field: float(sp_value)}}
+                    jira.session.put(update_url, json=update_data)
+                    logger.info(f"Updated Story Points for sub-task {subtask_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Story Points for sub-task {subtask_key}: {e}")
+        # 2. Original Estimate (timetracking, but NOT timeSpent)
+        original_estimate = row.get("Original Estimate")
+        if original_estimate and str(original_estimate).strip() != "":
+            try:
+                update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
+                update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
+                jira.session.put(update_url, json=update_data)
+                logger.info(f"Updated Original Estimate for sub-task {subtask_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Original Estimate for sub-task {subtask_key}: {e}")
+        # 3. Start Date (use only Start Date field, not Actual Start)
+        start_date = row.get("Start Date")
+        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
+        if field_mapping and isinstance(field_mapping, dict):
+            start_date_field = field_mapping.get('Start Date', start_date_field)
+        if start_date and re.match(r"^\d{4}-\d{2}-\d{2}$", str(start_date).strip()):
+            try:
+                update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
+                update_data = {"fields": {start_date_field: str(start_date).strip()}}
+                jira.session.put(update_url, json=update_data)
+                logger.info(f"Updated Start Date for sub-task {subtask_key}")
+            except Exception as e:
+                logger.warning(f"Could not update Start Date for sub-task {subtask_key}: {e}")
+        # 4. Assignee (always update after creation)
+        # --- Assignee update: always use accountId if available, fallback to name ---
+        assignee_accountid = os.getenv("JIRA_ASSIGNEE_ACCOUNTID")
+        if assignee_accountid:
+            try:
+                jira._update_assignee(subtask_key, account_id=assignee_accountid)
+            except Exception as e:
+                logger.warning(f"Could not update assignee for sub-task {subtask_key}: {e}")
+        elif assignee_env:
+            try:
+                jira._update_assignee(subtask_key, name=assignee_env)
+            except Exception as e:
+                logger.warning(f"Could not update assignee for sub-task {subtask_key}: {e}")
+        # 5. Time Spent (log work only ONCE, do not update timetracking/timeSpent)
+        time_spent = row.get("Time spent")
+        if time_spent and str(time_spent).strip() != "":
+            try:
+                jira.log_work(subtask_key, str(time_spent).strip())
+                logger.info(f"Logged work for sub-task {subtask_key}")
+            except Exception as e:
+                logger.warning(f"Could not log work for sub-task {subtask_key}: {e}")
+        # 6. Parent (for sub-tasks, if specified)
+        parent_ref2 = (row.get("Parent") or "").strip()
+        if parent_ref2:
+            try:
+                parent_key2 = issue_map.get(parent_ref2) or issue_map.get(parent_ref2.lower())
+                if not parent_key2:
+                    parent_issue2 = jira.get_issue(parent_ref2)
+                    parent_key2 = parent_issue2.get("key")
+                if parent_key2:
+                    update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
+                    update_data = {"fields": {"parent": {"key": parent_key2}}}
+                    jira.session.put(update_url, json=update_data)
+                    logger.info(f"Linked parent {parent_key2} to sub-task {subtask_key}")
+            except Exception as e:
+                logger.warning(f"Could not set parent for sub-task {subtask_key}: {e}")
 
     # Write back the Created Issue ID to output.csv
     if all_rows and "Created Issue ID" in all_rows[0]:
@@ -474,6 +507,8 @@ if __name__ == "__main__":
     JIRA_EMAIL = prompt_env_var("JIRA_EMAIL", "Enter your Jira email")
     JIRA_TOKEN = prompt_env_var("JIRA_TOKEN", "Enter your Jira API token", secret=True)
     JIRA_ASSIGNEE = prompt_env_var("JIRA_ASSIGNEE", "Enter Jira assignee username or account ID (optional)", default="")
+    # Only prompt for Project ID once at the beginning
+    JIRA_PROJECT_ID = prompt_env_var("JIRA_PROJECT_ID", "Enter your Jira Project ID (e.g. ABC)")
 
 
     # Prompt for source CSV
@@ -553,6 +588,7 @@ if __name__ == "__main__":
             print("Warning: Could not parse updated field mapping. Using defaults.")
     else:
         print(f"Using default field mapping: {field_mapping}")
+    # Do NOT prompt for JIRA_PROJECT_ID again after field mapping review; use the value already loaded above.
 
     # Set env vars for this process
     os.environ["JIRA_URL"] = JIRA_URL
