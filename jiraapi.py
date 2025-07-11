@@ -13,12 +13,12 @@ import tempfile
 
 class JiraAPI:
 
-    def transition_issue(self, issue_key: str, transition_name: str = "Done") -> None:
+    def transition_issue(self, issue_key: str, transition_name: str = "Closed") -> None:
         """
-        Transition a Jira issue to a new status by name (e.g., Done, In Progress, Backlog).
+        Transition a Jira issue to a new status by name (e.g., Closed, In Progress, Backlog).
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
-            transition_name: The name of the transition to perform (default: 'Done').
+            transition_name: The name of the transition to perform (default: 'Closed').
         Raises:
             Exception: If the transition fails or is not found.
         """
@@ -266,17 +266,17 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
 
     # Expanded transition options: 6 choices
     print("\nSelect a status transition mode for created issues:")
-    print("  1. Done (default, prompt for each issue)")
+    print("  1. Closed (default, prompt for each issue)")
     print("  2. In Progress (prompt for each issue)")
     print("  3. Backlog (prompt for each issue)")
-    print("  4. Done All (all issues will be marked as Done, no further prompts)")
+    print("  4. Closed All (all issues will be marked as Closed, no further prompts)")
     print("  5. In Progress All (all issues will be marked as In Progress, no further prompts)")
     print("  6. Backlog All (all issues will be marked as Backlog, no further prompts)")
     mode_choice = input("Choose [1-6] or press Enter for default: ").strip()
     if mode_choice == "4":
         transition_mode = "all"
-        transition_all_status = "Done"
-        transition_default = "Done"
+        transition_all_status = "Closed"
+        transition_default = "Closed"
     elif mode_choice == "5":
         transition_mode = "all"
         transition_all_status = "In Progress"
@@ -293,13 +293,13 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         transition_default = "Backlog"
     else:
         transition_mode = "prompt"
-        transition_default = "Done"
+        transition_default = "Closed"
 
     # Create all top-level issues (Story, Task, etc.)
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
-        sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
+        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
         sp_value = row.get("Story Points")
         # Use project from .env if available, else from CSV, and save to .env if not set
         project_val = project_id_env or row["Project"]
@@ -364,8 +364,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 if any(f['id'] == sp_field for f in fields_json):
                     update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
                     update_data = {"fields": {sp_field: float(sp_value)}}
-                    jira.session.put(update_url, json=update_data)
-                    logger.info(f"Updated Story Points for {issue_key}")
+                    response = jira.session.put(update_url, json=update_data)
+                    if not response.ok:
+                        logger.error(f"Jira PUT error updating Story Points for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                    else:
+                        logger.info(f"Updated Story Points for {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Story Points for {issue_key}: {e}")
         # 2. Original Estimate (timetracking)
@@ -374,21 +377,27 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             try:
                 update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
                 update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
-                jira.session.put(update_url, json=update_data)
-                logger.info(f"Updated Original Estimate for {issue_key}")
+                response = jira.session.put(update_url, json=update_data)
+                if not response.ok:
+                    logger.error(f"Jira PUT error updating Original Estimate for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                else:
+                    logger.info(f"Updated Original Estimate for {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Original Estimate for {issue_key}: {e}")
         # 3. Start Date
         start_date = row.get("Start Date")
-        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
+        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
         if field_mapping and isinstance(field_mapping, dict):
             start_date_field = field_mapping.get('Start Date', start_date_field)
         if start_date and re.match(r"^\d{4}-\d{2}-\d{2}$", str(start_date).strip()):
             try:
                 update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
                 update_data = {"fields": {start_date_field: str(start_date).strip()}}
-                jira.session.put(update_url, json=update_data)
-                logger.info(f"Updated Start Date for {issue_key}")
+                response = jira.session.put(update_url, json=update_data)
+                if not response.ok:
+                    logger.error(f"Jira PUT error updating Start Date for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                else:
+                    logger.info(f"Updated Start Date for {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Start Date for {issue_key}: {e}")
         # 4. Assignee (always update after creation)
@@ -456,7 +465,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
 
-        sp_field = field_mapping.get('Story Points', 'customfield_10037') if field_mapping else 'customfield_10037'
+        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
         sp_value = row.get("Story Points")
         # Use project from .env if available, else from CSV
         project_val = project_id_env or row["Project"]
@@ -510,8 +519,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 if any(f['id'] == sp_field for f in fields_json):
                     update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
                     update_data = {"fields": {sp_field: float(sp_value)}}
-                    jira.session.put(update_url, json=update_data)
-                    logger.info(f"Updated Story Points for sub-task {subtask_key}")
+                    response = jira.session.put(update_url, json=update_data)
+                    if not response.ok:
+                        logger.error(f"Jira PUT error updating Story Points for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                    else:
+                        logger.info(f"Updated Story Points for sub-task {subtask_key}")
             except Exception as e:
                 logger.warning(f"Could not update Story Points for sub-task {subtask_key}: {e}")
         # 2. Original Estimate (timetracking, but NOT timeSpent)
@@ -520,21 +532,27 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             try:
                 update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
                 update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
-                jira.session.put(update_url, json=update_data)
-                logger.info(f"Updated Original Estimate for sub-task {subtask_key}")
+                response = jira.session.put(update_url, json=update_data)
+                if not response.ok:
+                    logger.error(f"Jira PUT error updating Original Estimate for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                else:
+                    logger.info(f"Updated Original Estimate for sub-task {subtask_key}")
             except Exception as e:
                 logger.warning(f"Could not update Original Estimate for sub-task {subtask_key}: {e}")
         # 3. Start Date (use only Start Date field, not Actual Start)
         start_date = row.get("Start Date")
-        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10015')
+        start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
         if field_mapping and isinstance(field_mapping, dict):
             start_date_field = field_mapping.get('Start Date', start_date_field)
         if start_date and re.match(r"^\d{4}-\d{2}-\d{2}$", str(start_date).strip()):
             try:
                 update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
                 update_data = {"fields": {start_date_field: str(start_date).strip()}}
-                jira.session.put(update_url, json=update_data)
-                logger.info(f"Updated Start Date for sub-task {subtask_key}")
+                response = jira.session.put(update_url, json=update_data)
+                if not response.ok:
+                    logger.error(f"Jira PUT error updating Start Date for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                else:
+                    logger.info(f"Updated Start Date for sub-task {subtask_key}")
             except Exception as e:
                 logger.warning(f"Could not update Start Date for sub-task {subtask_key}: {e}")
         # 4. Assignee (always update after creation)
@@ -594,10 +612,28 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 tracker_writer.writerow(row)
 
 if __name__ == "__main__":
-
     import getpass
     import subprocess
     import sys
+    import logging
+    try:
+        # Setup logging to error.log as early as possible
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+            handlers=[
+                logging.FileHandler("error.log", mode='a', encoding='utf-8'),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+        # ...existing code...
+        # Place your main script logic here, e.g.:
+        # import_stories_and_subtasks(...)
+        # If your script uses argparse or input, ensure it's inside this try block
+        pass  # ...existing code...
+    except Exception as e:
+        logging.error(f"Uncaught exception: {e}", exc_info=True)
+        print(f"Uncaught exception: {e}. See error.log for details.")
     from pathlib import Path
     from dotenv import load_dotenv, set_key
     from pathlib import Path as SysPath
@@ -629,58 +665,65 @@ if __name__ == "__main__":
     JIRA_PROJECT_ID = prompt_env_var("JIRA_PROJECT_ID", "Enter your Jira Project ID (e.g. ABC)")
 
 
-    # Prompt for source CSV
-    print("\nEnter the path to your Outlook CSV export (e.g. Testconv.csv):")
-    while True:
-        source_csv = input("CSV file path: ").strip()
-        if Path(source_csv).is_file():
-            break
-        print("File not found. Please enter a valid file path.")
-
-    # Download all Jira fields to a JSON file for debugging field issues
-    print("\nFetching Jira field metadata and saving to jira_fields.json...")
-    curl_cmd = [
-        "curl",
-        "-u", f"{JIRA_EMAIL}:{JIRA_TOKEN}",
-        "-X", "GET",
-        f"{JIRA_URL.rstrip('/')}/rest/api/3/field",
-        "-H", "Accept: application/json",
-        "-o", "jira_fields.json"
-    ]
-    try:
-        subprocess.run(curl_cmd, check=True)
-        print("Jira field metadata saved to jira_fields.json.\n")
-    except subprocess.CalledProcessError as e:
-        print("Warning: Could not fetch Jira field metadata. Continuing anyway.")
-
-    # Run Outlook prep script to generate output.csv in project root
-    print("\nProcessing CSV for Jira import...")
-    prep_script = Path(__file__).parent / "Outlook Prep" / "Outlook prep.py"
+    # Prompt user to choose CSV ingestion mode
+    print("\nChoose import mode:")
+    print("1. Ingest a new CSV file")
+    print("2. Re-run import using last output.csv")
+    mode_choice = input("Enter 1 or 2: ").strip()
     project_root = Path(__file__).parent
     output_csv = project_root / "output.csv"
-    try:
-        # V1.22: Run Outlook Prep script interactively so user can respond to prompts
-        subprocess.run([
-            sys.executable, str(prep_script), source_csv
-        ], check=True)
-        print("CSV processing complete.\n")
-    except subprocess.CalledProcessError as e:
-        print("Error running Outlook prep script:")
-        sys.exit(1)
-
-    # Pause and prompt user to check output.csv
-    print("=== Review Output ===")
-    print(f"The processed file is ready at: {output_csv}")
-    print("Please open and review 'output.csv' for accuracy and errors before proceeding.")
-    proceed = input("\nType 'yes' to continue importing into Jira, or anything else to abort: ").strip().lower()
-    if proceed != 'yes':
-        print("Aborted. No changes made to Jira.")
-        sys.exit(0)
-    import_path = str(output_csv)
+    if mode_choice == "2":
+        # Use output.csv directly
+        import_path = str(output_csv)
+        print(f"Re-running import using {import_path}")
+    else:
+        # Prompt for source CSV
+        print("\nEnter the path to your Outlook CSV export (e.g. Testconv.csv):")
+        while True:
+            source_csv = input("CSV file path: ").strip()
+            if Path(source_csv).is_file():
+                break
+            print("File not found. Please enter a valid file path.")
+        # Download all Jira fields to a JSON file for debugging field issues
+        print("\nFetching Jira field metadata and saving to jira_fields.json...")
+        curl_cmd = [
+            "curl",
+            "-u", f"{JIRA_EMAIL}:{JIRA_TOKEN}",
+            "-X", "GET",
+            f"{JIRA_URL.rstrip('/')}/rest/api/3/field",
+            "-H", "Accept: application/json",
+            "-o", "jira_fields.json"
+        ]
+        try:
+            subprocess.run(curl_cmd, check=True)
+            print("Jira field metadata saved to jira_fields.json.\n")
+        except subprocess.CalledProcessError as e:
+            print("Warning: Could not fetch Jira field metadata. Continuing anyway.")
+        # Run Outlook prep script to generate output.csv in project root
+        print("\nProcessing CSV for Jira import...")
+        prep_script = Path(__file__).parent / "Outlook Prep" / "Outlook prep.py"
+        try:
+            subprocess.run([
+                sys.executable, str(prep_script), source_csv
+            ], check=True)
+            print("CSV processing complete.\n")
+        except subprocess.CalledProcessError as e:
+            print("Error running Outlook prep script:")
+            sys.exit(1)
+        # Pause and prompt user to check output.csv
+        print("=== Review Output ===")
+        print(f"The processed file is ready at: {output_csv}")
+        print("Please open and review 'output.csv' for accuracy and errors before proceeding.")
+        proceed = input("\nType 'yes' to continue importing into Jira, or anything else to abort: ").strip().lower()
+        if proceed != 'yes':
+            print("Aborted. No changes made to Jira.")
+            sys.exit(0)
+        import_path = str(output_csv)
 
     # === FIELD MAPPING REVIEW ===
     field_mapping = {
-        'Story Points': 'customfield_10037',
+        'Story Points': 'customfield_10146',
+        'Start Date': 'customfield_10257',
         'Actual Start': 'customfield_10008',
         'Allow Story Points on Sub-tasks': False,  # New option, default False
     }

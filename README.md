@@ -57,8 +57,8 @@
 
 **6. Resolution Status Management & Autoclose**
    - At the start of import, choose how to set the Resolution/Status for all created issues and sub-tasks:
-     - **Prompt for each issue:** Done (default), In Progress, Backlog, or custom transition per issue.
-     - **All issues auto-transitioned:** Done All, In Progress All, or Backlog All (no further prompts).
+     - **Prompt for each issue:** Closed (default), In Progress, Backlog, or custom transition per issue.
+     - **All issues auto-transitioned:** Closed All, In Progress All, or Backlog All (no further prompts).
    - The "All" options apply the selected status to all issues and sub-tasks without further prompts.
 
 **7. Jira API Integration**
@@ -126,7 +126,7 @@ You can also control this via the field mapping review utility by setting the `A
 
 ## Version
 
-- **V1.30 (Stable)** — Resolution Status Management expanded: Now supports 6 options (Done, In Progress, Backlog, Done All, In Progress All, Backlog All) for status/transition selection. The "All" options apply the selected status to all issues and sub-tasks without further prompts. All other features from v1.29 retained. This is a stable release.
+- **V1.30 (Stable)** — Resolution Status Management expanded: Now supports 6 options (Closed, In Progress, Backlog, Closed All, In Progress All, Backlog All) for status/transition selection. The "All" options apply the selected status to all issues and sub-tasks without further prompts. All other features from v1.29 retained. This is a stable release.
 
 ---
 

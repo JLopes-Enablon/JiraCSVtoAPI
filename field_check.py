@@ -56,7 +56,8 @@ if __name__ == "__main__":
     field_map = get_field_map(fields_json)
     # Example: current field mapping
     current_fields = {
-        'Story Points': 'customfield_10037',
+        'Story Points': 'customfield_10146',
+        'Start Date': 'customfield_10257',
         'Actual Start': 'customfield_10008',
     }
     new_fields = prompt_field_mapping(field_map, current_fields)

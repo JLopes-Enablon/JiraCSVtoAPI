@@ -7,6 +7,9 @@ __pycache__/
 # Ignore output and log files
 output.csv
 tracker.csv
-error.log
+*.log
 jira_fields.json
 jiraapi_basic.py
+*.csv
+!requirements.txt
+!sample_events.csv
