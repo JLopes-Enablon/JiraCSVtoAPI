@@ -1,3 +1,11 @@
+# jiraapi.py
+# Script for importing issues into Jira from CSV files. Handles both pre-formatted work item CSVs and calendar exports (Outlook/Teams).
+# - Creates issues and sub-tasks in Jira using REST API
+# - Updates Story Points and Original Estimate fields for Stories
+# - Maps CSV columns to Jira fields, including custom fields
+# - Handles field editability via Jira's editmeta endpoint
+# - Usage: Run via main menu or directly for bulk import
+
 import requests
 import os
 import csv
@@ -321,8 +329,8 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
-        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
-        sp_value = row.get("Story Points")
+        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_value = row.get("Story Points") or row.get("Story point estimate")
         # Use project from .env if available, else from CSV, and save to .env if not set
         project_val = project_id_env or row["Project"]
         if not project_id_env:
@@ -381,13 +389,12 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             allow_update_sp = field_mapping.get('Allow Story Points on Sub-tasks', False)
         if allow_update_sp and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
-                # Use the correct editable Story Points field (customfield_10016)
-                correct_sp_field = "customfield_10016"  # Story point estimate (confirmed editable)
+                # Use the correct editable Story Points field (customfield_10146)
+                correct_sp_field = "customfield_10146"  # Story Points (confirmed editable)
                 
                 # Check if the issue allows Story Points updates
                 editmeta_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}/editmeta"
                 editmeta_response = jira.session.get(editmeta_url)
-                
                 if editmeta_response.ok:
                     editable_fields = editmeta_response.json().get('fields', {})
                     if correct_sp_field in editable_fields:
@@ -522,8 +529,8 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
 
-        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
-        sp_value = row.get("Story Points")
+        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_value = row.get("Story Points") or row.get("Story point estimate")
         # Use project from .env if available, else from CSV
         project_val = project_id_env or row["Project"]
         # Always create the sub-task with minimal fields
@@ -571,13 +578,12 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         # 1. Story Points (if allowed) - Using correct field ID
         if allow_sp_on_subtasks and sp_value is not None and str(sp_value).strip() != "":
             try:
-                # Use the correct editable Story Points field (customfield_10016)
-                correct_sp_field = "customfield_10016"  # Story point estimate (confirmed editable)
+                # Use the correct editable Story Points field (customfield_10146)
+                correct_sp_field = "customfield_10146"  # Story Points (confirmed editable)
                 
                 # Check if the sub-task allows Story Points updates
                 editmeta_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}/editmeta"
                 editmeta_response = jira.session.get(editmeta_url)
-                
                 if editmeta_response.ok:
                     editable_fields = editmeta_response.json().get('fields', {})
                     if correct_sp_field in editable_fields:
@@ -781,7 +787,7 @@ if __name__ == "__main__":
 
     # === FIELD MAPPING REVIEW ===
     field_mapping = {
-        'Story Points': 'customfield_10016',  # Corrected to use the editable field
+        'Story Points': 'customfield_10146',  # Corrected to use the editable field
         'Start Date': 'customfield_10257',
         'Actual Start': 'customfield_10008',
         'Allow Story Points on Sub-tasks': False,  # New option, default False

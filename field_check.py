@@ -1,3 +1,10 @@
+# field_check.py
+# Script for checking and mapping Jira fields for issue creation and updates.
+# - Loads Jira field metadata and displays available fields
+# - Prompts user to map CSV columns to Jira fields
+# - Ensures correct custom field IDs are used (e.g., Story Points)
+# - Usage: Run to verify field mapping before bulk import
+
 import json
 import os
 from pathlib import Path
