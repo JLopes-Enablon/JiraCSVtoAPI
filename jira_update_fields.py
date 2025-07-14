@@ -38,7 +38,7 @@ def update_issue_fields(jira, issue_key, story_points, original_estimate, field_
         "Summary": "summary",
         "Priority": "priority",
         "Start Date": field_mapping.get("Start Date", "customfield_10257"),
-        "Story Points": field_mapping.get("Story Points", "customfield_10016"),
+        "Story Points": "customfield_10016",  # Corrected to use the editable field
         "Original Estimate": "timetracking",
     }
     # Compare and update all fields

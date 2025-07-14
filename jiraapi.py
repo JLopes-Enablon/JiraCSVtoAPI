@@ -13,31 +13,38 @@ import tempfile
 
 class JiraAPI:
 
-    def transition_issue(self, issue_key: str, transition_name: str = "Closed") -> None:
+    def transition_issue(self, issue_key: str, transition_name: str = "Closed") -> bool:
         """
         Transition a Jira issue to a new status by name (e.g., Closed, In Progress, Backlog).
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
             transition_name: The name of the transition to perform (default: 'Closed').
-        Raises:
-            Exception: If the transition fails or is not found.
+        Returns:
+            True if transition was successful, False otherwise.
         """
-        # Get available transitions
-        url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
-        resp = self.session.get(url)
-        self._handle_response(resp)
-        transitions = resp.json().get("transitions", [])
-        # Find the transition by name (case-insensitive)
-        transition = next((t for t in transitions if t["name"].lower() == transition_name.lower()), None)
-        if not transition:
-            available = ", ".join([t["name"] for t in transitions])
-            raise Exception(f"Transition '{transition_name}' not found for {issue_key}. Available: {available}")
-        transition_id = transition["id"]
-        # Perform the transition
-        post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
-        data = {"transition": {"id": transition_id}}
-        post_resp = self.session.post(post_url, json=data)
-        self._handle_response(post_resp)
+        try:
+            # Get available transitions
+            url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+            resp = self.session.get(url)
+            self._handle_response(resp)
+            transitions = resp.json().get("transitions", [])
+            # Find the transition by name (case-insensitive)
+            transition = next((t for t in transitions if t["name"].lower() == transition_name.lower()), None)
+            if not transition:
+                available = ", ".join([t["name"] for t in transitions])
+                self.logger.warning(f"Transition '{transition_name}' not found for {issue_key}. Available: {available}")
+                return False
+            transition_id = transition["id"]
+            # Perform the transition
+            post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+            data = {"transition": {"id": transition_id}}
+            post_resp = self.session.post(post_url, json=data)
+            self._handle_response(post_resp)
+            self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to transition {issue_key} to '{transition_name}': {e}")
+            return False
         self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
     """
     A class to interact with the Jira REST API.
@@ -73,6 +80,21 @@ class JiraAPI:
         self._handle_response(response)
         self.logger.info(f"Fetched issue: {issue_key}")
         return response.json()
+
+    def get_issue_status(self, issue_key: str) -> Optional[str]:
+        """
+        Get the current status of a Jira issue.
+        Args:
+            issue_key: The Jira issue key (e.g., 'PROJ-123').
+        Returns:
+            The current status name, or None if issue not found.
+        """
+        try:
+            issue = self.get_issue(issue_key)
+            return issue.get("fields", {}).get("status", {}).get("name")
+        except Exception as e:
+            self.logger.error(f"Failed to get status for {issue_key}: {e}")
+            return None
 
     def create_issue(self, project_key: str, summary: str, issue_type: str = "Story", assignee: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
         """
@@ -299,7 +321,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
-        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
         sp_value = row.get("Story Points")
         # Use project from .env if available, else from CSV, and save to .env if not set
         project_val = project_id_env or row["Project"]
@@ -359,31 +381,66 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             allow_update_sp = field_mapping.get('Allow Story Points on Sub-tasks', False)
         if allow_update_sp and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
-                with open("jira_fields.json", "r", encoding="utf-8") as f:
-                    fields_json = json.load(f)
-                if any(f['id'] == sp_field for f in fields_json):
-                    update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
-                    update_data = {"fields": {sp_field: float(sp_value)}}
-                    response = jira.session.put(update_url, json=update_data)
-                    if not response.ok:
-                        logger.error(f"Jira PUT error updating Story Points for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                # Use the correct editable Story Points field (customfield_10016)
+                correct_sp_field = "customfield_10016"  # Story point estimate (confirmed editable)
+                
+                # Check if the issue allows Story Points updates
+                editmeta_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}/editmeta"
+                editmeta_response = jira.session.get(editmeta_url)
+                
+                if editmeta_response.ok:
+                    editable_fields = editmeta_response.json().get('fields', {})
+                    if correct_sp_field in editable_fields:
+                        update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                        update_data = {"fields": {correct_sp_field: float(sp_value)}}
+                        response = jira.session.put(update_url, json=update_data)
+                        if not response.ok:
+                            logger.error(f"Jira PUT error updating Story Points for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                        else:
+                            logger.info(f"Updated Story Points for {issue_key} using {correct_sp_field}")
                     else:
-                        logger.info(f"Updated Story Points for {issue_key}")
+                        logger.warning(f"Story Points field {correct_sp_field} not editable for {issue_key} (issue type: {issue_type})")
+                else:
+                    logger.warning(f"Could not check editable fields for {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Story Points for {issue_key}: {e}")
-        # 2. Original Estimate (timetracking)
+        # 2. Original Estimate (timetracking) - Skip for Sub-tasks as it's not editable
         original_estimate = row.get("Original Estimate")
-        if original_estimate and str(original_estimate).strip() != "":
+        if original_estimate and str(original_estimate).strip() != "" and issue_type.lower() != "sub-task":
             try:
-                update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
-                update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
-                response = jira.session.put(update_url, json=update_data)
-                if not response.ok:
-                    logger.error(f"Jira PUT error updating Original Estimate for {issue_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                # Check if timetracking is editable for this issue type
+                editmeta_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}/editmeta"
+                editmeta_response = jira.session.get(editmeta_url)
+                
+                if editmeta_response.ok:
+                    editable_fields = editmeta_response.json().get('fields', {})
+                    
+                    # Try different time tracking field approaches
+                    time_fields_to_try = [
+                        ('timetracking', {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}),
+                        ('timeoriginalestimate', {"fields": {"timeoriginalestimate": str(original_estimate).strip()}})
+                    ]
+                    
+                    updated = False
+                    for field_name, update_data in time_fields_to_try:
+                        if field_name in editable_fields:
+                            update_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}"
+                            response = jira.session.put(update_url, json=update_data)
+                            if response.ok:
+                                logger.info(f"Updated Original Estimate for {issue_key} using {field_name}")
+                                updated = True
+                                break
+                            else:
+                                logger.debug(f"Failed to update Original Estimate using {field_name}: {response.status_code}")
+                    
+                    if not updated:
+                        logger.info(f"Original Estimate not supported for {issue_key} (issue type: {issue_type}) - this is normal for Sub-tasks")
                 else:
-                    logger.info(f"Updated Original Estimate for {issue_key}")
+                    logger.warning(f"Could not check editable fields for Original Estimate on {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Original Estimate for {issue_key}: {e}")
+        elif issue_type.lower() == "sub-task":
+            logger.debug(f"Skipping Original Estimate for Sub-task {issue_key} - not supported in this Jira configuration")
         # 3. Start Date
         start_date = row.get("Start Date")
         start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
@@ -465,7 +522,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
 
-        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
         sp_value = row.get("Story Points")
         # Use project from .env if available, else from CSV
         project_val = project_id_env or row["Project"]
@@ -511,34 +568,36 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                     jira.transition_issue(subtask_key, transition_name)
                 except Exception as e:
                     logger.warning(f"Could not transition sub-task {subtask_key} to '{transition_name}': {e}")
-        # 1. Story Points (if allowed)
-        if allow_sp_on_subtasks and sp_field and sp_value is not None and str(sp_value).strip() != "":
+        # 1. Story Points (if allowed) - Using correct field ID
+        if allow_sp_on_subtasks and sp_value is not None and str(sp_value).strip() != "":
             try:
-                with open("jira_fields.json", "r", encoding="utf-8") as f:
-                    fields_json = json.load(f)
-                if any(f['id'] == sp_field for f in fields_json):
-                    update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
-                    update_data = {"fields": {sp_field: float(sp_value)}}
-                    response = jira.session.put(update_url, json=update_data)
-                    if not response.ok:
-                        logger.error(f"Jira PUT error updating Story Points for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                # Use the correct editable Story Points field (customfield_10016)
+                correct_sp_field = "customfield_10016"  # Story point estimate (confirmed editable)
+                
+                # Check if the sub-task allows Story Points updates
+                editmeta_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}/editmeta"
+                editmeta_response = jira.session.get(editmeta_url)
+                
+                if editmeta_response.ok:
+                    editable_fields = editmeta_response.json().get('fields', {})
+                    if correct_sp_field in editable_fields:
+                        update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
+                        update_data = {"fields": {correct_sp_field: float(sp_value)}}
+                        response = jira.session.put(update_url, json=update_data)
+                        if not response.ok:
+                            logger.error(f"Jira PUT error updating Story Points for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
+                        else:
+                            logger.info(f"Updated Story Points for sub-task {subtask_key} using {correct_sp_field}")
                     else:
-                        logger.info(f"Updated Story Points for sub-task {subtask_key}")
+                        logger.info(f"Story Points field {correct_sp_field} not editable for sub-task {subtask_key} - this is normal")
+                else:
+                    logger.warning(f"Could not check editable fields for sub-task {subtask_key}")
             except Exception as e:
                 logger.warning(f"Could not update Story Points for sub-task {subtask_key}: {e}")
-        # 2. Original Estimate (timetracking, but NOT timeSpent)
+        # 2. Original Estimate - Skip for Sub-tasks (not supported in this Jira configuration)
         original_estimate = row.get("Original Estimate")
         if original_estimate and str(original_estimate).strip() != "":
-            try:
-                update_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}"
-                update_data = {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}
-                response = jira.session.put(update_url, json=update_data)
-                if not response.ok:
-                    logger.error(f"Jira PUT error updating Original Estimate for sub-task {subtask_key}: {response.status_code} {response.text} | Payload: {update_data}")
-                else:
-                    logger.info(f"Updated Original Estimate for sub-task {subtask_key}")
-            except Exception as e:
-                logger.warning(f"Could not update Original Estimate for sub-task {subtask_key}: {e}")
+            logger.info(f"Skipping Original Estimate for sub-task {subtask_key} - not supported in this Jira configuration")
         # 3. Start Date (use only Start Date field, not Actual Start)
         start_date = row.get("Start Date")
         start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
@@ -722,7 +781,7 @@ if __name__ == "__main__":
 
     # === FIELD MAPPING REVIEW ===
     field_mapping = {
-        'Story Points': 'customfield_10146',
+        'Story Points': 'customfield_10016',  # Corrected to use the editable field
         'Start Date': 'customfield_10257',
         'Actual Start': 'customfield_10008',
         'Allow Story Points on Sub-tasks': False,  # New option, default False
