@@ -99,9 +99,68 @@ You can also control this via the field mapping review utility by setting the `A
 ---
 
 
-## Files, Logging & Security
 
-- `jiraapi.py` — Main workflow: interactive, idempotent, logs API calls, .env integration, time tracking and worklog enabled, Start Date update after creation, robust error handling, and field mapping review. All stale code removed and fully commented.
+## Scripts Overview & Usage
+
+### `jiraapi.py` — Main Import & Workflow
+- **Purpose:** Bulk import Outlook calendar events into Jira Cloud, with robust field mapping, idempotent import, and full logging.
+- **Usage:**
+  ```bash
+  python jiraapi.py
+  ```
+- **Input:** Outlook CSV export (see above for format), interactive prompts for credentials and field mapping.
+- **Output:** `output.csv` (import results), `tracker.csv` (log), `error.log` (errors).
+- **Features:**
+  - Interactive prompts for credentials, CSV path, and field choices.
+  - Field mapping review utility.
+  - Idempotent import (only new rows processed).
+  - Status transition options (Closed, In Progress, Backlog, etc.).
+  - Updates Story Points, assignee, Start Date, Time Spent, Parent, etc.
+  - Full logging and error handling.
+
+### `jira_update_fields.py` — Update Existing Issues from CSV
+- **Purpose:** Update missing or changed fields (including custom fields) for existing Jira issues listed in a CSV/output file.
+- **Usage:**
+  ```bash
+  python jira_update_fields.py output.csv
+  ```
+- **Input:** CSV file with Jira issue keys and fields to update (e.g., `output.csv`).
+- **Output:** Updates issues in Jira, logs to `error.log`.
+- **Features:**
+  - Compares all fields in CSV to Jira and updates any that have changed.
+  - Handles custom fields, time tracking, status, etc.
+  - Logs work (Time Spent) for each issue.
+  - Prints update summary for each row.
+
+### `jira_export_my_issues.py` — Export All My Issues to CSV
+- **Purpose:** Export all Jira issues assigned to or created by the current user to a local CSV, including all available fields.
+- **Usage:**
+  ```bash
+  python jira_export_my_issues.py my_issues.csv
+  ```
+- **Input:** None (fetches from Jira using API and your credentials).
+- **Output:** CSV file (`my_issues.csv`) with all fields as columns for easy editing.
+- **Features:**
+  - Authenticates using `.env` variables.
+  - Fetches all issues assigned to or reported by you.
+  - Dynamically extracts all available fields (standard + custom).
+  - Writes a CSV with all fields as columns.
+
+### `jira_field_names_export.py` — Export Field Metadata to CSV
+- **Purpose:** Export all Jira field metadata (ID, display name, description) to a CSV for mapping and review.
+- **Usage:**
+  ```bash
+  python jira_field_names_export.py jira_field_names.csv
+  ```
+- **Input:** None (fetches from Jira using API and your credentials).
+- **Output:** CSV file (`jira_field_names.csv`) with columns: Field ID, Display Name, Description.
+- **Features:**
+  - Authenticates using `.env` variables.
+  - Fetches all field metadata from Jira.
+  - Lets you cross-reference field keys in your data CSV with human-readable names.
+  - Helps you filter/edit your main data CSV for updates.
+
+### Other Files
 - `Outlook Prep/Outlook prep.py` — CSV prep script: interactive, auto-renames headers, normalizes dates, excludes unwanted events, prompts for Jira fields, and generates output.csv. Fully commented.
 - `field_check.py` — Interactive field mapping review utility, lets you review and update Jira custom field mappings before import.
 - `requirements.txt` — Python dependencies (`requests`, `python-dotenv`).
