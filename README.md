@@ -31,11 +31,15 @@ You will be prompted for these when running the scripts for the first time. They
 
 ## Required CSV Format for Input
 
-Your input CSV must have the following columns (header row required):
+If you are not importing from and Outlook CSV your input CSV must have the following columns (header row required):
 
 ```
 Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Time spent,Priority
 ```
+If you are using an Outlook generated CSV export. this needs to include these fields at a minimum, this will automatically convert the date into the fields above.
+```
+Subject,Start Date, Start Time, End Time
+
 
 **Notes:**
 - `IssueType` can be `Epic`, `Story`, `Task`, or `Sub-task` (case-insensitive)
