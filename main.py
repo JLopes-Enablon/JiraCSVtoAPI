@@ -80,7 +80,15 @@ def run_script(script_name, args=None, description=""):
         print("-" * 40)
         
         # Build command
-        cmd = [sys.executable, script_name]
+        import subprocess
+        import sys
+        import os
+        # Use the virtual environment's python if available
+        venv_python = os.path.join(os.path.dirname(__file__), '.venv', 'bin', 'python')
+        if os.path.isfile(venv_python):
+            cmd = [venv_python, script_name]
+        else:
+            cmd = [sys.executable, script_name]
         if args:
             cmd.extend(args)
         
@@ -176,19 +184,13 @@ def handle_menu_choice(choice):
         print("\nYou selected: Import Pre-Formatted Work Item CSV to Jira.")
         print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output.csv, June.CSV, etc.).")
         print("If your CSV is a calendar export from Outlook or Teams, use option 2 instead.")
-        csv_file = input("\nEnter CSV filename to import (or press Enter for 'output.csv'): ").strip()
-        if not csv_file:
-            csv_file = "output.csv"
-        run_script("jiraapi.py", [csv_file], f"Importing work items from {csv_file} to Jira")
+        run_script("jiraapi.py", [], "Importing work items to Jira")
     
     elif choice in ['2', 'p']:
         print("\nYou selected: Import Calendar Export (Outlook/Teams) to Jira.")
         print("Use this option if your CSV was exported directly from Outlook or Teams and needs formatting for Jira import.")
         print("This will run the calendar prep workflow and then import to Jira.")
-        csv_file = input("\nEnter calendar-exported CSV filename (or press Enter for 'Outlook.csv'): ").strip()
-        if not csv_file:
-            csv_file = "Outlook.csv"
-        run_script("jiraapi.py", ["--prep-outlook", csv_file], f"Preparing and importing calendar export '{csv_file}' via JiraAPI workflow")
+        run_script("jiraapi.py", ["--prep-outlook"], "Preparing and importing calendar export via JiraAPI workflow")
         
     elif choice in ['3', 'u']:
         csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output.csv'): ").strip()
