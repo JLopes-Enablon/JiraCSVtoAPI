@@ -1,3 +1,9 @@
+import sys
+import os
+# Ensure project root is in sys.path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 # Outlook Prep Script for Jira CSV Import
 # This script processes Outlook calendar CSV exports and prepares them for Jira import.
 # It normalizes headers, cleans data, reformats dates, calculates durations, and prompts the user for Jira-specific fields.
@@ -206,9 +212,11 @@ if __name__ == "__main__":
     parser.add_argument("input_csv", help="Path to Outlook CSV export file")
     parser.add_argument("--temp_csv", default="temp_noquotes.csv", help="Temporary CSV file with quotes removed and dates fixed")
     args = parser.parse_args()
-    # Always use output.csv in the project root
+    # Always use output/output.csv
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    output_csv = os.path.join(project_root, "output.csv")
+    output_dir = os.path.join(project_root, "output")
+    os.makedirs(output_dir, exist_ok=True)
+    output_csv = os.path.join(output_dir, "output.csv")
 
     # Main processing function: writes Jira-ready CSV using user selections
     def process_outlook_csv_with_type(input_csv, output_csv, project_id, selected_issue_type, auto_parent, parent_id):

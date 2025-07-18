@@ -29,9 +29,12 @@ import subprocess
 import logging
 from datetime import datetime
 
+sys.path.insert(0, './tools')
+# Now you can import scripts from tools/ as modules
+
 # Configure logging
 logging.basicConfig(
-    filename="main_menu.log",
+    filename="logs/main_menu.log",
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -127,10 +130,10 @@ def export_submenu():
         choice = input("Please select an option (1-3): ").strip().lower()
         
         if choice in ['1']:
-            filename = input("\nEnter filename for focused export (or press Enter for 'bulk_transition_issues.csv'): ").strip()
+            filename = input("\nEnter filename for focused export (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
             if not filename:
-                filename = "bulk_transition_issues.csv"
-            run_script("jira_export_my_issues.py", [filename], "Exporting focused fields")
+                filename = "output/bulk_transition_issues.csv"
+            run_script("Tools/jira_export_my_issues.py", [filename], "Exporting focused fields")
             break
         elif choice in ['2']:
             filename = input("\nEnter filename for full export (or press Enter for 'my_issues_full.csv'): ").strip()
@@ -138,7 +141,7 @@ def export_submenu():
                 filename = "my_issues_full.csv"
             # Note: We'll need to modify jira_export_my_issues.py to support full export mode
             # For now, use the same script but with different filename
-            run_script("jira_export_my_issues.py", [filename], "Exporting all fields")
+            run_script("Tools/jira_export_my_issues.py", [filename], "Exporting all fields")
             break
         elif choice in ['3']:
             break
@@ -151,9 +154,9 @@ def automated_workflow():
     print("=" * 50)
     
     # Step 1: Export issues
-    export_filename = "bulk_transition_issues.csv"
+    export_filename = "output/bulk_transition_issues.csv"
     print(f"\n📤 Step 1: Exporting issues to '{export_filename}'...")
-    run_script("jira_export_my_issues.py", [export_filename], "Exporting issues for bulk transition")
+    run_script("Tools/jira_export_my_issues.py", [export_filename], "Exporting issues for bulk transition")
     
     # Check if export was successful
     if os.path.exists(export_filename):
@@ -164,10 +167,10 @@ def automated_workflow():
         
         if proceed == 'y':
             print(f"\n🔄 Step 2: Running bulk transition...")
-            run_script("jira_bulk_transition.py", [export_filename], "Bulk transitioning issues")
+            run_script("Tools/jira_bulk_transition.py", [export_filename], "Bulk transitioning issues")
             
             # Step 3: Check for transition report
-            report_file = "transition_report.csv"
+            report_file = "output/transition_report.csv"
             if os.path.exists(report_file):
                 print(f"\n📊 Transition report saved to '{report_file}'")
                 print("💡 Review the report for detailed results and any failed transitions.")
@@ -182,7 +185,7 @@ def handle_menu_choice(choice):
     
     if choice in ['1', 'i']:
         print("\nYou selected: Import Pre-Formatted Work Item CSV to Jira.")
-        print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output.csv, June.CSV, etc.).")
+        print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output/output.csv, June.CSV, etc.).")
         print("If your CSV is a calendar export from Outlook or Teams, use option 2 instead.")
         run_script("jiraapi.py", [], "Importing work items to Jira")
     
@@ -193,25 +196,25 @@ def handle_menu_choice(choice):
         run_script("jiraapi.py", ["--prep-outlook"], "Preparing and importing calendar export via JiraAPI workflow")
         
     elif choice in ['3', 'u']:
-        csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output.csv'): ").strip()
+        csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output/output.csv'): ").strip()
         if not csv_file:
-            csv_file = "output.csv"
-        run_script("jira_update_fields.py", [csv_file], f"Updating existing Jira issues from {csv_file}")
+            csv_file = "output/output.csv"
+        run_script("Tools/jira_update_fields.py", [csv_file], f"Updating existing Jira issues from {csv_file}")
         
     elif choice in ['4', 'c']:
-        run_script("field_check.py", description="Reviewing and configuring field mappings")
+        run_script("Tools/field_check.py", description="Reviewing and configuring field mappings")
         
     elif choice in ['5', 'e']:
         export_submenu()
         
     elif choice in ['6', 't']:
-        csv_file = input("\nEnter CSV filename for bulk transition (or press Enter for 'bulk_transition_issues.csv'): ").strip()
+        csv_file = input("\nEnter CSV filename for bulk transition (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
         if not csv_file:
-            csv_file = "bulk_transition_issues.csv"
+            csv_file = "output/bulk_transition_issues.csv"
         
         # Check if file exists
         if os.path.exists(csv_file):
-            run_script("jira_bulk_transition.py", [csv_file], f"Bulk transitioning issues from {csv_file}")
+            run_script("Tools/jira_bulk_transition.py", [csv_file], f"Bulk transitioning issues from {csv_file}")
         else:
             print(f"\n❌ File '{csv_file}' not found.")
             print("💡 Try option 5 to export your issues first, or option 7 for the complete workflow.")
@@ -223,12 +226,12 @@ def handle_menu_choice(choice):
         filename = input("\nEnter filename for field metadata (or press Enter for 'jira_field_names.csv'): ").strip()
         if not filename:
             filename = "jira_field_names.csv"
-        run_script("jira_field_names_export.py", [filename], "Exporting Jira field metadata")
+        run_script("Tools/jira_field_names_export.py", [filename], "Exporting Jira field metadata")
         
     elif choice in ['9', 'r']:
         issue_key = input("\nEnter Jira issue key to check transitions (e.g., PROJ-123): ").strip()
         if issue_key:
-            run_script("jira_check_transitions.py", [issue_key], f"Checking transitions for {issue_key}")
+            run_script("Tools/jira_check_transitions.py", [issue_key], f"Checking transitions for {issue_key}")
         else:
             print("❌ Issue key required.")
             

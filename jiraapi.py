@@ -329,7 +329,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
-        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
         sp_value = row.get("Story Points") or row.get("Story point estimate")
         # Use project from .env if available, else from CSV, and save to .env if not set
         project_val = project_id_env or row["Project"]
@@ -386,12 +386,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         # 1. Story Points (for all issue types and sub-tasks if allowed)
         allow_update_sp = True
         if issue_type.lower() == "sub-task" and field_mapping and isinstance(field_mapping, dict):
-            allow_update_sp = field_mapping.get('Allow Story Points on Sub-tasks', False)
+            allow_update_sp = field_mapping.get('Allow Story Points ', False)
         if allow_update_sp and sp_field and sp_value is not None and str(sp_value).strip() != "":
             try:
-                # Use the correct editable Story Points field (customfield_10146)
-                correct_sp_field = "customfield_10146"  # Story Points (confirmed editable)
-                
+                # Use the selected editable Story Points field
+                correct_sp_field = sp_field
                 # Check if the issue allows Story Points updates
                 editmeta_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}/editmeta"
                 editmeta_response = jira.session.get(editmeta_url)
@@ -510,7 +509,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     #
     # Or, to control this via the field mapping config (advanced):
     #    if field_mapping and isinstance(field_mapping, dict):
-    #        allow_sp_on_subtasks = field_mapping.get('Allow Story Points on Sub-tasks', True)
+    #        allow_sp_on_subtasks = field_mapping.get('Allow Story Points ', True)
     #
     # If you want to expose this as a user option, see the README for instructions.
     allow_sp_on_subtasks = True  # <--- DEFAULT: Story Points are updated for sub-tasks
@@ -529,7 +528,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Skipping sub-task '{row['Summary']}' because parent issue '{parent_ref}' is not defined in the CSV or in Jira. Error: {e}")
                 continue
 
-        sp_field = field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146'
+        sp_field = field_mapping.get('Story Points', 'customfield_10016') if field_mapping else 'customfield_10016'
         sp_value = row.get("Story Points") or row.get("Story point estimate")
         # Use project from .env if available, else from CSV
         project_val = project_id_env or row["Project"]
@@ -578,9 +577,8 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         # 1. Story Points (if allowed) - Using correct field ID
         if allow_sp_on_subtasks and sp_value is not None and str(sp_value).strip() != "":
             try:
-                # Use the correct editable Story Points field (customfield_10146)
-                correct_sp_field = "customfield_10146"  # Story Points (confirmed editable)
-                
+                # Use the selected editable Story Points field
+                correct_sp_field = sp_field
                 # Check if the sub-task allows Story Points updates
                 editmeta_url = f"{jira.base_url}/rest/api/3/issue/{subtask_key}/editmeta"
                 editmeta_response = jira.session.get(editmeta_url)
@@ -657,17 +655,19 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             except Exception as e:
                 logger.warning(f"Could not set parent for sub-task {subtask_key}: {e}")
 
-    # Write back the Created Issue ID to output.csv
+    # Write back the Created Issue ID to output/output.csv
     if all_rows and "Created Issue ID" in all_rows[0]:
-        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        output_dir = os.path.join(os.path.dirname(csv_path), "output")
+        os.makedirs(output_dir, exist_ok=True)
+        output_csv_path = os.path.join(output_dir, os.path.basename(csv_path))  # output_dir should be 'output/'
+        with open(output_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=all_rows[0].keys())
             writer.writeheader()
             for row in all_rows:
                 writer.writerow(row)
 
-        # Append all rows to tracker.csv for persistent tracking
-        tracker_path = os.path.join(os.path.dirname(csv_path), "tracker.csv")
-        # Check if tracker.csv exists to determine if we need to write the header
+        # Append all rows to output/tracker.csv for persistent tracking
+        tracker_path = os.path.join(output_dir, "tracker.csv")  # output_dir should be 'output/'
         write_header = not os.path.isfile(tracker_path)
         with open(tracker_path, 'a', newline='', encoding='utf-8') as trackerfile:
             tracker_writer = csv.DictWriter(trackerfile, fieldnames=all_rows[0].keys())
@@ -687,7 +687,7 @@ if __name__ == "__main__":
             level=logging.DEBUG,
             format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             handlers=[
-                logging.FileHandler("error.log", mode='a', encoding='utf-8'),
+                logging.FileHandler("logs/error.log", mode='a', encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
             ]
         )
@@ -733,12 +733,12 @@ if __name__ == "__main__":
     # Prompt user to choose CSV ingestion mode
     print("\nChoose import mode:")
     print("1. Ingest a new CSV file")
-    print("2. Re-run import using last output.csv")
+    print("2. Re-run import using last output/output.csv")
     mode_choice = input("Enter 1 or 2: ").strip()
     project_root = Path(__file__).parent
-    output_csv = project_root / "output.csv"
+    output_csv = project_root / "output/output.csv"
     if mode_choice == "2":
-        # Use output.csv directly
+        # Use output/output.csv directly
         import_path = str(output_csv)
         print(f"Re-running import using {import_path}")
     else:
@@ -764,9 +764,9 @@ if __name__ == "__main__":
             print("Jira field metadata saved to jira_fields.json.\n")
         except subprocess.CalledProcessError as e:
             print("Warning: Could not fetch Jira field metadata. Continuing anyway.")
-        # Run Outlook prep script to generate output.csv in project root
+        # Run Outlook prep script to generate output/output.csv in output folder
         print("\nProcessing CSV for Jira import...")
-        prep_script = Path(__file__).parent / "Outlook Prep" / "Outlook prep.py"
+        prep_script = Path(__file__).parent / "Tools" / "Outlook prep.py"
         try:
             subprocess.run([
                 sys.executable, str(prep_script), source_csv
@@ -775,10 +775,10 @@ if __name__ == "__main__":
         except subprocess.CalledProcessError as e:
             print("Error running Outlook prep script:")
             sys.exit(1)
-        # Pause and prompt user to check output.csv
+        # Pause and prompt user to check output/output.csv
         print("=== Review Output ===")
         print(f"The processed file is ready at: {output_csv}")
-        print("Please open and review 'output.csv' for accuracy and errors before proceeding.")
+        print("Please open and review 'output/output.csv' for accuracy and errors before proceeding.")
         proceed = input("\nType 'yes' to continue importing into Jira, or anything else to abort: ").strip().lower()
         if proceed != 'yes':
             print("Aborted. No changes made to Jira.")
@@ -790,25 +790,72 @@ if __name__ == "__main__":
         'Story Points': 'customfield_10146',  # Corrected to use the editable field
         'Start Date': 'customfield_10257',
         'Actual Start': 'customfield_10008',
-        'Allow Story Points on Sub-tasks': False,  # New option, default False
+        'Allow Story Points ': True,  # New option, default True
     }
     print("\nWould you like to review and optionally update Jira custom field mappings? (Recommended if you see field errors)")
     print("1. Yes, review and update field mapping\n2. No, use current mapping")
     field_check_choice = input("Enter 1 or 2: ").strip()
     if field_check_choice == "1":
+        # Validate custom fields in field_mapping against jira_fields.json
+        def validate_custom_fields(field_mapping, fields_json_path="jira_fields.json"):
+            try:
+                with open(fields_json_path, "r", encoding="utf-8") as f:
+                    jira_fields = json.load(f)
+                valid_field_ids = {f["id"] for f in jira_fields if f.get("custom")}
+                invalid_fields = {}
+                for k, v in field_mapping.items():
+                    if k in ["Story Points", "Start Date", "Actual Start"] and v not in valid_field_ids:
+                        invalid_fields[k] = v
+                return invalid_fields
+            except Exception as e:
+                print(f"Warning: Could not validate custom fields: {e}")
+                return {}
+
+        # Run validation and warn user if any custom fields are invalid
+        invalid_fields = validate_custom_fields(field_mapping)
+        if invalid_fields:
+            print("\nWARNING: The following custom fields in your mapping are NOT present in Jira:")
+            for k, v in invalid_fields.items():
+                print(f"  {k}: {v}")
+            print("Please fix these field IDs in your mapping before continuing.")
+            print("You can update them now, or abort and fix jira_fields.json/mapping.")
+            print("Refer to jira_fields.json for valid custom field IDs.")
+            print("\nField mapping before fix:")
+            print(json.dumps(field_mapping, indent=2))
+            for k in invalid_fields:
+                new_id = input(f"Enter valid custom field ID for '{k}' (or leave blank to skip): ").strip()
+                if new_id:
+                    field_mapping[k] = new_id
+            print("\nUpdated field mapping:")
+            print(json.dumps(field_mapping, indent=2))
+            confirm = input("Type 'yes' to continue with updated mapping, or anything else to abort: ").strip().lower()
+            if confirm != "yes":
+                print("Aborted. Please fix your field mapping and try again.")
+                sys.exit(1)
+
+        # Prompt user for Story Points on Sub-tasks before launching field_check.py
+        print("\nDo you want to Allow Story Points ?")
+        print("1. Yes (recommended)")
+        print("2. No")
+        sp_subtasks_choice = input("Enter 1 or 2: ").strip()
+        if sp_subtasks_choice == "2":
+            field_mapping['Allow Story Points '] = False
+        else:
+            field_mapping['Allow Story Points '] = True
+
         # Use a temp file to communicate mapping
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             tf_path = tf.name
             # Write current mapping including the new option
             json.dump(field_mapping, tf, indent=2)
             tf.flush()
-        subprocess.run([sys.executable, "field_check.py", tf_path])
+        subprocess.run([sys.executable, "Tools/field_check.py", tf_path])
         try:
             with open(tf_path, "r", encoding="utf-8") as f:
                 field_mapping = json.load(f)
-            # Ensure the new option is present (default to False if missing)
-            if 'Allow Story Points on Sub-tasks' not in field_mapping:
-                field_mapping['Allow Story Points on Sub-tasks'] = False
+            # Ensure the new option is present (default to True if missing)
+            if 'Allow Story Points ' not in field_mapping:
+                field_mapping['Allow Story Points '] = True
             print(f"Using field mapping: {field_mapping}")
         except Exception:
             print("Warning: Could not parse updated field mapping. Using defaults.")
