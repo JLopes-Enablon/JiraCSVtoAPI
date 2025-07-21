@@ -94,10 +94,14 @@ def process_outlook_csv(input_csv, output_csv):
             "IssueType",
             "Parent",
             "Start Date",
-            "Story Points",
-            "Original Estimate",
-            "Time spent",
-            "Priority"
+        match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$', date_str)
+        if match:
+            day, month, year = match.groups()
+            # If year is 2 digits, assume 2000+ (can adjust if needed)
+            if len(year) == 2:
+                year = f"20{year}"
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        return date_str
         ]
         writer = csv.DictWriter(outfile, fieldnames=output_headers)
         writer.writeheader()
