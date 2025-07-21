@@ -152,3 +152,4 @@ Below is a detailed overview of the main functions and features provided by this
 - **.gitignore**: Ensures sensitive and output files are not committed to version control.
 
 For more details on each script, see the inline comments and docstrings within the codebase.
+For help feel free to teach out.
