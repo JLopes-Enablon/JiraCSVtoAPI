@@ -228,8 +228,8 @@ This toolkit automates the process of importing issues and work items into Jira 
 
 ## Usage
 1. Run `main.py` to start the toolkit and select your workflow:
-   - Option 1: Import pre-formatted Jira work item CSVs
-   - Option 2: Prepare Outlook/Teams calendar exports for Jira import
+   - Option 1: Import Calendar Export (Outlook/Teams) to Jira (Default)
+   - Option 2: Import pre-formatted Jira work item CSVs
 2. Follow prompts to clean, map, and import your data.
 3. Use `field_check.py` to verify field mapping if needed.
 

@@ -671,9 +671,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
 
     # Write back the Created Issue ID to output/output.csv for tracking
     if all_rows and "Created Issue ID" in all_rows[0]:
-        output_dir = os.path.join(os.path.dirname(csv_path), "output")
+        # Always use the project root's output directory for consistency
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(project_root, "output")
         os.makedirs(output_dir, exist_ok=True)
-        output_csv_path = os.path.join(output_dir, os.path.basename(csv_path))  # output_dir should be 'output/'
+        output_csv_path = os.path.join(output_dir, "output.csv")  # Always use output.csv as the standard name
         with open(output_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=all_rows[0].keys())
             writer.writeheader()
@@ -681,7 +683,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 writer.writerow(row)
 
         # Append all rows to output/tracker.csv for persistent tracking
-        tracker_path = os.path.join(output_dir, "tracker.csv")  # output_dir should be 'output/'
+        tracker_path = os.path.join(output_dir, "tracker.csv")
         write_header = not os.path.isfile(tracker_path)
         with open(tracker_path, 'a', newline='', encoding='utf-8') as trackerfile:
             tracker_writer = csv.DictWriter(trackerfile, fieldnames=all_rows[0].keys())

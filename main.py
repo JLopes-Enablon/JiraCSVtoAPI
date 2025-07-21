@@ -28,6 +28,7 @@ import os
 import sys
 import subprocess
 import logging
+import argparse
 from datetime import datetime
 
 sys.path.insert(0, './tools')
@@ -49,39 +50,55 @@ def clear_screen():
     """
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def print_header():
+def print_header(advanced_mode=False):
     """
     Print the application header with version info.
     """
     print("=" * 60)
-    print("🚀 JIRA MANAGEMENT TOOLKIT v1.31")
+    mode_text = " - Advanced Mode" if advanced_mode else " - Simple Mode"
+    print(f"🚀 JIRA MANAGEMENT TOOLKIT v1.31{mode_text}")
     print("   Comprehensive Jira Operations Suite")
     print("=" * 60)
+    if not advanced_mode:
+        print("💡 Run with '--advanced' flag for full menu options")
     print()
 
-def print_menu():
+def print_menu(advanced_mode=False):
     """
     Print the main menu with organized sections and shortcuts.
+    Shows simplified menu by default, full menu in advanced mode.
     """
-    print("📥 IMPORT FUNCTIONS")
-    print("   1. Import Pre-Formatted Work Item CSV to Jira                [I]")
-    print("   2. Import Calendar Export (Outlook/Teams) to Jira             [P]")
-    print()
-    print("📝 ISSUE UPDATES")
-    print("   3. Update existing Jira issues from CSV                      [U]")
-    print("   4. Review and configure field mappings                       [C]")
-    print()
-    print("📊 BULK UPDATES AND EXPORTS")
-    print("   5. Export my Jira issues to CSV                              [E]")
-    print("   6. Bulk transition issues to completion status               [T]")
-    print("   7. Complete workflow: Export → Bulk transition               [W]")
-    print()
-    print("🔧 SUNDRY FUNCTIONS")
-    print("   8. Export Jira field metadata for reference                  [F]")
-    print("   9. Check available transitions for an issue                  [R]")
-    print()
-    print("❌ EXIT")
-    print("   0. Exit application                                          [Q]")
+    if advanced_mode:
+        print("📥 IMPORT FUNCTIONS")
+        print("   1. Import Calendar Export (Outlook/Teams) to Jira (Default)  [P]")
+        print("   2. Import Pre-Formatted Work Item CSV to Jira                [I]")
+        print()
+        print("📝 ISSUE UPDATES")
+        print("   3. Update existing Jira issues from CSV                      [U]")
+        print("   4. Review and configure field mappings                       [C]")
+        print()
+        print("📊 BULK UPDATES AND EXPORTS")
+        print("   5. Export my Jira issues to CSV                              [E]")
+        print("   6. Bulk transition issues to completion status               [T]")
+        print("   7. Complete workflow: Export → Bulk transition               [W]")
+        print()
+        print("🔧 SUNDRY FUNCTIONS")
+        print("   8. Export Jira field metadata for reference                  [F]")
+        print("   9. Check available transitions for an issue                  [R]")
+        print()
+        print("❌ EXIT")
+        print("   0. Exit application                                          [Q]")
+    else:
+        # Simplified menu - only show most common options
+        print("📥 MOST COMMON FUNCTIONS")
+        print("   1. Import Calendar Export (Outlook/Teams) to Jira (Default)  [P]")
+        print("   5. Export my Jira issues to CSV                              [E]")
+        print()
+        print("🔧 ADVANCED OPTIONS")
+        print("   A. Show advanced menu (all options)                          [A]")
+        print()
+        print("❌ EXIT")
+        print("   0. Exit application                                          [Q]")
     print()
     print("=" * 60)
 
@@ -204,80 +221,96 @@ def automated_workflow():
     else:
         print(f"\n❌ Export failed - '{export_filename}' not found. Please check the export operation.")
 
-def handle_menu_choice(choice):
+def handle_menu_choice(choice, advanced_mode=False):
     """
     Handle the user's menu choice and run the appropriate workflow or script.
     Returns False if the user chooses to exit, True otherwise.
+    Returns 'advanced' if user wants to switch to advanced mode.
     """
     choice = choice.strip().lower()
     
-    if choice in ['1', 'i']:
-        # Import pre-formatted work item CSV to Jira
-        print("\nYou selected: Import Pre-Formatted Work Item CSV to Jira.")
-        print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output/output.csv, June.CSV, etc.).")
-        print("If your CSV is a calendar export from Outlook or Teams, use option 2 instead.")
-        run_script("jiraapi.py", [], "Importing work items to Jira")
-    
-    elif choice in ['2', 'p']:
+    if choice in ['1', 'p']:
         # Import calendar export to Jira
         print("\nYou selected: Import Calendar Export (Outlook/Teams) to Jira.")
         print("Use this option if your CSV was exported directly from Outlook or Teams and needs formatting for Jira import.")
         print("This will run the calendar prep workflow and then import to Jira.")
         run_script("jiraapi.py", ["--prep-outlook"], "Preparing and importing calendar export via JiraAPI workflow")
-        
-    elif choice in ['3', 'u']:
-        # Update existing Jira issues from CSV
-        csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output/output.csv'): ").strip()
-        if not csv_file:
-            csv_file = "output/output.csv"
-        run_script("Tools/jira_update_fields.py", [csv_file], f"Updating existing Jira issues from {csv_file}")
-        
-    elif choice in ['4', 'c']:
-        # Review and configure field mappings
-        run_script("Tools/field_check.py", description="Reviewing and configuring field mappings")
-        
+    
     elif choice in ['5', 'e']:
         # Export my Jira issues to CSV
         export_submenu()
         
-    elif choice in ['6', 't']:
-        # Bulk transition issues to completion status
-        csv_file = input("\nEnter CSV filename for bulk transition (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
-        if not csv_file:
-            csv_file = "output/bulk_transition_issues.csv"
+    elif choice in ['a'] and not advanced_mode:
+        # Switch to advanced mode
+        return 'advanced'
         
-        # Check if file exists before running bulk transition
-        if os.path.exists(csv_file):
-            run_script("Tools/jira_bulk_transition.py", [csv_file], f"Bulk transitioning issues from {csv_file}")
-        else:
-            print(f"\n❌ File '{csv_file}' not found.")
-            print("💡 Try option 5 to export your issues first, or option 7 for the complete workflow.")
+    elif advanced_mode:
+        # Advanced mode options
+        if choice in ['2', 'i']:
+            # Import pre-formatted work item CSV to Jira
+            print("\nYou selected: Import Pre-Formatted Work Item CSV to Jira.")
+            print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output/output.csv, June.CSV, etc.).")
+            print("If your CSV is a calendar export from Outlook or Teams, use option 1 instead.")
+            run_script("jiraapi.py", [], "Importing work items to Jira")
             
-    elif choice in ['7', 'w']:
-        # Complete workflow: Export → Bulk transition
-        automated_workflow()
-        
-    elif choice in ['8', 'f']:
-        # Export Jira field metadata for reference
-        filename = input("\nEnter filename for field metadata (or press Enter for 'jira_field_names.csv'): ").strip()
-        if not filename:
-            filename = "jira_field_names.csv"
-        run_script("Tools/jira_field_names_export.py", [filename], "Exporting Jira field metadata")
-        
-    elif choice in ['9', 'r']:
-        # Check available transitions for an issue
-        issue_key = input("\nEnter Jira issue key to check transitions (e.g., PROJ-123): ").strip()
-        if issue_key:
-            run_script("Tools/jira_check_transitions.py", [issue_key], f"Checking transitions for {issue_key}")
-        else:
-            print("❌ Issue key required.")
+        elif choice in ['3', 'u']:
+            # Update existing Jira issues from CSV
+            csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output/output.csv'): ").strip()
+            if not csv_file:
+                csv_file = "output/output.csv"
+            run_script("Tools/jira_update_fields.py", [csv_file], f"Updating existing Jira issues from {csv_file}")
             
+        elif choice in ['4', 'c']:
+            # Review and configure field mappings
+            run_script("Tools/field_check.py", description="Reviewing and configuring field mappings")
+            
+        elif choice in ['6', 't']:
+            # Bulk transition issues to completion status
+            csv_file = input("\nEnter CSV filename for bulk transition (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
+            if not csv_file:
+                csv_file = "output/bulk_transition_issues.csv"
+            
+            # Check if file exists before running bulk transition
+            if os.path.exists(csv_file):
+                run_script("Tools/jira_bulk_transition.py", [csv_file], f"Bulk transitioning issues from {csv_file}")
+            else:
+                print(f"\n❌ File '{csv_file}' not found.")
+                print("💡 Try option 5 to export your issues first, or option 7 for the complete workflow.")
+                
+        elif choice in ['7', 'w']:
+            # Complete workflow: Export → Bulk transition
+            automated_workflow()
+            
+        elif choice in ['8', 'f']:
+            # Export Jira field metadata for reference
+            filename = input("\nEnter filename for field metadata (or press Enter for 'jira_field_names.csv'): ").strip()
+            if not filename:
+                filename = "jira_field_names.csv"
+            run_script("Tools/jira_field_names_export.py", [filename], "Exporting Jira field metadata")
+            
+        elif choice in ['9', 'r']:
+            # Check available transitions for an issue
+            issue_key = input("\nEnter Jira issue key to check transitions (e.g., PROJ-123): ").strip()
+            if issue_key:
+                run_script("Tools/jira_check_transitions.py", [issue_key], f"Checking transitions for {issue_key}")
+            else:
+                print("❌ Issue key required.")
+                
+        elif choice in ['0', 'q', 'quit', 'exit']:
+            # Exit application
+            return False
+        else:
+            print("❌ Invalid option. Please select from the menu or use keyboard shortcuts.")
+    
     elif choice in ['0', 'q', 'quit', 'exit']:
         # Exit application
         return False
         
     else:
-        print("❌ Invalid option. Please select from the menu or use keyboard shortcuts.")
+        if not advanced_mode:
+            print("❌ Invalid option. Please select 1, 5, A, or 0. Use 'A' for advanced options.")
+        else:
+            print("❌ Invalid option. Please select from the menu or use keyboard shortcuts.")
     
     return True
 
@@ -293,19 +326,42 @@ def main():
     Main application loop for the menu system.
     Handles user input, runs workflows, and manages error handling.
     """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Jira Management Toolkit')
+    parser.add_argument('--advanced', action='store_true', 
+                       help='Show advanced menu with all options')
+    args = parser.parse_args()
+    
+    # Determine initial mode
+    advanced_mode = args.advanced
+    
     print("🚀 Starting Jira Management Toolkit...")
-    logging.info("Application started")
+    logging.info(f"Application started in {'advanced' if advanced_mode else 'simple'} mode")
     
     try:
         while True:
             clear_screen()
-            print_header()
-            print_menu()
+            print_header(advanced_mode)
+            print_menu(advanced_mode)
             
-            choice = input("Select an option (0-9) or use keyboard shortcuts [Q to quit]: ")
+            # Adjust prompt based on mode
+            if advanced_mode:
+                prompt = "Select an option (0-9) or use keyboard shortcuts [Q to quit]: "
+            else:
+                prompt = "Select an option (1, 5, A, or 0) [Q to quit]: "
             
-            if not handle_menu_choice(choice):
+            choice = input(prompt)
+            
+            result = handle_menu_choice(choice, advanced_mode)
+            
+            if result == False:
+                # User chose to exit
                 break
+            elif result == 'advanced':
+                # User chose to switch to advanced mode
+                advanced_mode = True
+                logging.info("Switched to advanced mode")
+                continue  # Skip pause and refresh menu immediately
             
             pause_for_user()
             
