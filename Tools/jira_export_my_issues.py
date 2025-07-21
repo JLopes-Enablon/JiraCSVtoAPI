@@ -24,13 +24,8 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-from dotenv import load_dotenv
-from jiraapi import JiraAPI
-
 def flatten_field(val):
     """Flatten dict/list field to a readable string for CSV export."""
-    if isinstance(val, dict):
-        # Try common display keys
         for k in ["name", "key", "value", "summary"]:
             if k in val:
                 return str(val[k])

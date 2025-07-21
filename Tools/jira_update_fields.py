@@ -6,10 +6,12 @@ Update missing custom fields (e.g., Story Points, Original Estimate) for existin
 Usage:
     python jira_update_fields.py [input_csv]
 
-- Reads issue keys and field values from the CSV.
-- Updates only missing or errored fields for each issue.
-- Skips issues without a valid Jira key.
-- Logs errors to error.log.
+"""
+"""
+jira_update_fields.py
+
+Bulk updates Jira issues from merged CSV, handling all field types robustly and safely.
+Usage: Run directly to update Jira after review of merged.csv.
 """
 import sys
 import os
@@ -65,19 +67,9 @@ def update_issue_fields(jira, issue_key, story_points, original_estimate, field_
                 update_fields["parent"] = {"key": csv_value}
                 print(f"Will update parent for {issue_key} to {{'key': '{csv_value}'}}")
         elif csv_field.lower() == "issuetype":
-            # Use object format with id for issuetype
-            if csv_value and "issuetype" in editable_fields:
-                # Try to get id from editable_fields
-                issuetype_obj = editable_fields["issuetype"]
-                # If possible, map name to id
-                if "allowedValues" in issuetype_obj:
-                    for allowed in issuetype_obj["allowedValues"]:
-                        if allowed.get("name", "").lower() == str(csv_value).lower():
-                            update_fields["issuetype"] = {"id": allowed.get("id")}
-                            print(f"Will update issuetype for {issue_key} to id {allowed.get('id')} ({csv_value})")
-                            break
-                else:
-                    print(f"Could not map issuetype name to id for {issue_key}, skipping update.")
+            # Skip updating issuetype entirely per user request
+            print(f"Skipping update of issuetype for {issue_key} as requested.")
+            continue
         elif csv_field.lower() == "components":
             # Components must be a list of objects with 'name'
             if csv_value and "components" in editable_fields:

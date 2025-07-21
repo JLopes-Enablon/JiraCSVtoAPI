@@ -21,9 +21,15 @@ def get_week_of_year(date_str):
 # Helper to calculate time difference and format as Jira xh xm
 def get_jira_duration(start_time, end_time):
     """Calculate Jira duration string (xh ym) from start and end time (HH:MM:SS)."""
-    fmt = "%H:%M:%S"
-    start = datetime.datetime.strptime(start_time, fmt)
-    end = datetime.datetime.strptime(end_time, fmt)
+    def parse_time(t):
+        for fmt in ("%H:%M:%S", "%H:%M"):
+            try:
+                return datetime.datetime.strptime(t, fmt)
+            except ValueError:
+                continue
+        raise ValueError(f"Time '{t}' is not in a recognized format (expected HH:MM or HH:MM:SS)")
+    start = parse_time(start_time)
+    end = parse_time(end_time)
     delta = end - start
     total_minutes = delta.total_seconds() // 60
     hours = int(total_minutes // 60)
@@ -236,8 +242,8 @@ if __name__ == "__main__":
                 # Skip header row
                 if i == 0 and all(k == v for k, v in row.items()):
                     continue
-                # Clean up row values
-                row = {k.replace('\ufeff', '').strip(): (v.strip() if v else '') for k, v in row.items()}
+                # Clean up row values and normalize keys to title case for robust access
+                row = {k.replace('\ufeff', '').strip().title(): (v.strip() if v else '') for k, v in row.items()}
                 # Robustly map 'Subject' to 'Summary' if needed
                 if 'Summary' not in row and 'Subject' in row:
                     row['Summary'] = row['Subject']
@@ -250,7 +256,12 @@ if __name__ == "__main__":
                     continue
                 try:
                     week = get_week_of_year(row["Start Date"])
-                    original_estimate = get_jira_duration(row["Start Time"], row["End Time"])
+                    # Accept both 'Start Time' and 'Start time' (and similar variants)
+                    start_time = row.get("Start Time") or row.get("Start time")
+                    end_time = row.get("End Time") or row.get("End time")
+                    if not start_time or not end_time:
+                        raise KeyError("Missing 'Start Time' or 'End Time' column in row.")
+                    original_estimate = get_jira_duration(start_time, end_time)
                     # Convert Jira duration (e.g., '1h 30m') to float hours for Story Points
                     def duration_to_hours(duration):
                         hours = 0.0

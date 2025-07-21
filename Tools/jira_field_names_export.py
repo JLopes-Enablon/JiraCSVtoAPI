@@ -6,9 +6,6 @@ Export all Jira field metadata (ID, display name, description) to a CSV for mapp
 Usage:
     python jira_field_names_export.py [output_csv]
 
-- Authenticates using .env variables
-- Fetches all field metadata from Jira
-- Writes a CSV with Field ID, Display Name, Description
 """
 import os
 import csv

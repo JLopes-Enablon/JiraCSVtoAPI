@@ -1,10 +1,14 @@
-# jiraapi.py
-# Script for importing issues into Jira from CSV files. Handles both pre-formatted work item CSVs and calendar exports (Outlook/Teams).
-# - Creates issues and sub-tasks in Jira using REST API
-# - Updates Story Points and Original Estimate fields for Stories
-# - Maps CSV columns to Jira fields, including custom fields
-# - Handles field editability via Jira's editmeta endpoint
-# - Usage: Run via main menu or directly for bulk import
+"""
+jiraapi.py
+
+Main Jira API integration and bulk import script.
+- Handles importing issues and sub-tasks from CSV files (work item or calendar exports)
+- Creates issues and sub-tasks in Jira using REST API
+- Updates Story Points, Original Estimate, Start Date, and other fields
+- Maps CSV columns to Jira fields, including custom fields
+- Handles field editability via Jira's editmeta endpoint
+- Usage: Run via main menu or directly for bulk import
+"""
 
 import requests
 import os
@@ -19,11 +23,20 @@ import json
 from pathlib import Path
 import tempfile
 
+
+# -------------------------------------------------------------
+# JiraAPI: Main class for interacting with Jira REST API
+# -------------------------------------------------------------
+
+# -------------------------------------------------------------
+# JiraAPI: Main class for interacting with Jira REST API
+# -------------------------------------------------------------
 class JiraAPI:
 
     def transition_issue(self, issue_key: str, transition_name: str = "Closed") -> bool:
         """
         Transition a Jira issue to a new status by name (e.g., Closed, In Progress, Backlog).
+        Uses /transitions endpoint to find and perform the transition.
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
             transition_name: The name of the transition to perform (default: 'Closed').
@@ -54,13 +67,9 @@ class JiraAPI:
             self.logger.error(f"Failed to transition {issue_key} to '{transition_name}': {e}")
             return False
         self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
-    """
-    A class to interact with the Jira REST API.
-    Handles authentication, issue creation, sub-task creation, and error handling.
-    """
     def __init__(self, base_url: str, email: str, api_token: str) -> None:
         """
-        Initialize the JiraAPI client.
+        Initialize the JiraAPI client and session.
         Args:
             base_url: The base URL of the Jira instance.
             email: Jira user email for authentication.
@@ -74,7 +83,7 @@ class JiraAPI:
 
     def get_issue(self, issue_key: str) -> Dict[str, Any]:
         """
-        Retrieve a Jira issue by its key.
+        Retrieve a Jira issue by its key using /issue/{key} endpoint.
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
         Returns:
@@ -91,7 +100,7 @@ class JiraAPI:
 
     def get_issue_status(self, issue_key: str) -> Optional[str]:
         """
-        Get the current status of a Jira issue.
+        Get the current status of a Jira issue (e.g., 'To Do', 'In Progress', 'Done').
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
         Returns:
@@ -107,6 +116,7 @@ class JiraAPI:
     def create_issue(self, project_key: str, summary: str, issue_type: str = "Story", assignee: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
         """
         Create a new Jira issue with only safe fields (custom fields are handled post-creation).
+        Excludes custom fields on creation for reliability.
         Args:
             project_key: The Jira project key.
             summary: The summary/title of the issue.
@@ -142,6 +152,10 @@ class JiraAPI:
         """
         Helper to update the assignee of an issue by accountId (Jira Cloud) or name (Jira Server/DC).
         Always uses 'id' if the value looks like an accountId (contains a colon or is a UUID).
+        Args:
+            issue_key: The Jira issue key.
+            account_id: Jira Cloud accountId (preferred).
+            name: Jira Server/DC username (fallback).
         """
         update_url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
         update_data = None
@@ -234,7 +248,7 @@ class JiraAPI:
 
     def _handle_response(self, response: requests.Response) -> None:
         """
-        Handle the HTTP response from the Jira API.
+        Handle the HTTP response from the Jira API, raising exceptions for errors.
         Args:
             response: The HTTP response object.
         Raises:
@@ -248,6 +262,9 @@ class JiraAPI:
 
 
 
+###############################################################
+# import_stories_and_subtasks: Main bulk import workflow
+###############################################################
 def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None) -> None:
     """
     Import stories and sub-tasks from a CSV file into Jira.
@@ -270,6 +287,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     all_rows = []          # All rows from the CSV
 
     # Read and classify rows from the CSV file
+    # Only process rows that have not yet been imported (no Created Issue ID)
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
         reader = list(csv.DictReader(csvfile))
         for idx, row in enumerate(reader):
@@ -294,7 +312,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             issue_map[row["Created Issue ID"]] = row["Created Issue ID"]
             issue_map[summary_key] = row["Created Issue ID"]
 
-    # Expanded transition options: 6 choices
+    # Expanded transition options: 6 choices for workflow status
     print("\nSelect a status transition mode for created issues:")
     print("  1. Closed (default, prompt for each issue)")
     print("  2. In Progress (prompt for each issue)")
@@ -326,6 +344,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         transition_default = "Closed"
 
     # Create all top-level issues (Story, Task, etc.)
+    # For each, create in Jira, update mapping, and perform post-creation updates
     for idx, row in top_level_issues:
         summary_clean = (row["Summary"] or "").strip()
         issue_type = (row.get("IssueType") or "Story").strip()
@@ -353,8 +372,9 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         all_rows[idx]["Created Issue ID"] = issue_key
 
         # === Post-creation updates for all issue types ===
+        # Includes status transition, Story Points, Original Estimate, Start Date, Assignee, Time Spent, Parent
 
-        # Transition logic
+        # Transition logic (prompt or all)
         if transition_mode == "all":
             try:
                 jira.transition_issue(issue_key, transition_all_status)
@@ -384,6 +404,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 except Exception as e:
                     logger.warning(f"Could not transition {issue_key} to '{transition_name}': {e}")
         # 1. Story Points (for all issue types and sub-tasks if allowed)
+        # Only update if editable and value present
         allow_update_sp = True
         if issue_type.lower() == "sub-task" and field_mapping and isinstance(field_mapping, dict):
             allow_update_sp = field_mapping.get('Allow Story Points ', False)
@@ -411,6 +432,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             except Exception as e:
                 logger.warning(f"Could not update Story Points for {issue_key}: {e}")
         # 2. Original Estimate (timetracking) - Skip for Sub-tasks as it's not editable
+        # Try both timetracking and timeoriginalestimate fields
         original_estimate = row.get("Original Estimate")
         if original_estimate and str(original_estimate).strip() != "" and issue_type.lower() != "sub-task":
             try:
@@ -447,7 +469,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 logger.warning(f"Could not update Original Estimate for {issue_key}: {e}")
         elif issue_type.lower() == "sub-task":
             logger.debug(f"Skipping Original Estimate for Sub-task {issue_key} - not supported in this Jira configuration")
-        # 3. Start Date
+        # 3. Start Date (custom field, must match YYYY-MM-DD)
         start_date = row.get("Start Date")
         start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
         if field_mapping and isinstance(field_mapping, dict):
@@ -476,7 +498,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 jira._update_assignee(issue_key, name=assignee_env)
             except Exception as e:
                 logger.warning(f"Could not update assignee for {issue_key}: {e}")
-        # 5. Time Spent
+        # 5. Time Spent (worklog)
         time_spent = row.get("Time spent")
         if time_spent and str(time_spent).strip() != "":
             try:
@@ -502,16 +524,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
 
     # === Story Points for Sub-tasks: ALWAYS ENABLED by default ===
     # By default, Story Points will be updated for ALL issue types, including sub-tasks.
-    #
-    # To disable Story Points for sub-tasks, set the following variable to False.
-    #
-    #    allow_sp_on_subtasks = False
-    #
-    # Or, to control this via the field mapping config (advanced):
-    #    if field_mapping and isinstance(field_mapping, dict):
-    #        allow_sp_on_subtasks = field_mapping.get('Allow Story Points ', True)
-    #
-    # If you want to expose this as a user option, see the README for instructions.
+    # To disable, set allow_sp_on_subtasks = False or use field mapping config.
     allow_sp_on_subtasks = True  # <--- DEFAULT: Story Points are updated for sub-tasks
 
     for idx, row in subtasks:
@@ -544,6 +557,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         all_rows[idx]["Created Issue ID"] = subtask_key
 
         # === Post-creation updates for sub-tasks ===
+        # Includes status transition, Story Points, Start Date, Assignee, Time Spent, Parent
 
         # Transition logic for sub-tasks
         if transition_mode == "all":
@@ -655,7 +669,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             except Exception as e:
                 logger.warning(f"Could not set parent for sub-task {subtask_key}: {e}")
 
-    # Write back the Created Issue ID to output/output.csv
+    # Write back the Created Issue ID to output/output.csv for tracking
     if all_rows and "Created Issue ID" in all_rows[0]:
         output_dir = os.path.join(os.path.dirname(csv_path), "output")
         os.makedirs(output_dir, exist_ok=True)
@@ -676,6 +690,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             for row in all_rows:
                 tracker_writer.writerow(row)
 
+###############################################################
+# Main script entrypoint and environment setup
+###############################################################
+# This section sets up logging, loads environment variables, prompts for user input,
+# and runs the main import workflow. All steps are commented for clarity.
 if __name__ == "__main__":
     import getpass
     import subprocess
@@ -709,6 +728,9 @@ if __name__ == "__main__":
 
     print("=== Jira Import Automation ===\n")
     def prompt_env_var(var, prompt_text, secret=False, default=None):
+        """
+        Prompt for environment variable, save to .env if entered.
+        """
         val = os.getenv(var)
         if val:
             print(f"{var} loaded from .env")
@@ -730,7 +752,7 @@ if __name__ == "__main__":
     JIRA_PROJECT_ID = prompt_env_var("JIRA_PROJECT_ID", "Enter your Jira Project ID (e.g. ABC)")
 
 
-    # Prompt user to choose CSV ingestion mode
+    # Prompt user to choose CSV ingestion mode (new file or re-run last output)
     print("\nChoose import mode:")
     print("1. Ingest a new CSV file")
     print("2. Re-run import using last output/output.csv")
@@ -786,6 +808,7 @@ if __name__ == "__main__":
         import_path = str(output_csv)
 
     # === FIELD MAPPING REVIEW ===
+    # Optionally review and update custom field mapping before import
     field_mapping = {
         'Story Points': 'customfield_10146',  # Corrected to use the editable field
         'Start Date': 'customfield_10257',
@@ -798,6 +821,9 @@ if __name__ == "__main__":
     if field_check_choice == "1":
         # Validate custom fields in field_mapping against jira_fields.json
         def validate_custom_fields(field_mapping, fields_json_path="jira_fields.json"):
+            """
+            Validate custom field IDs in mapping against Jira field metadata.
+            """
             try:
                 with open(fields_json_path, "r", encoding="utf-8") as f:
                     jira_fields = json.load(f)
@@ -843,7 +869,7 @@ if __name__ == "__main__":
         else:
             field_mapping['Allow Story Points '] = True
 
-        # Use a temp file to communicate mapping
+        # Use a temp file to communicate mapping to field_check.py
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             tf_path = tf.name
             # Write current mapping including the new option
@@ -870,7 +896,7 @@ if __name__ == "__main__":
     if JIRA_ASSIGNEE:
         os.environ["JIRA_ASSIGNEE"] = JIRA_ASSIGNEE
 
-    # Proceed with import
+    # Proceed with import using final mapping and environment
     load_dotenv(override=True)
     logging.basicConfig(
         level=logging.DEBUG,

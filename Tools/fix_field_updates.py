@@ -33,6 +33,11 @@ def convert_time_to_seconds(time_str):
         total_seconds += int(hour_match.group(1)) * 3600
     
     # Extract minutes
+# Corrected field update methods for Story Points and Original Estimate based on diagnostic results.
+# This script provides the corrected implementations for your jiraapi.py
+
+# Load environment variables
+load_dotenv()
     minute_match = re.search(r'(\d+)m', time_str)
     if minute_match:
         total_seconds += int(minute_match.group(1)) * 60
@@ -49,6 +54,11 @@ def get_issue_editable_fields(base_url, session, issue_key):
 
 def update_story_points_corrected(base_url, session, issue_key, story_points_value, logger=None):
     """
+"""
+fix_field_updates.py
+
+Usage: Run directly to apply field fixes as needed.
+"""
     Corrected Story Points update using the proper field ID
     Based on diagnostic: customfield_10016 is the editable Story Points field
     """

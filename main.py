@@ -2,8 +2,8 @@
 """
 main.py - Jira Management Toolkit Menu System
 
-A unified menu-driven interface for all Jira management operations.
-Provides organized access to calendar imports, issue updates, bulk operations, and utilities.
+This script provides a unified menu-driven interface for all Jira management operations.
+It organizes access to calendar imports, issue updates, bulk operations, and utilities.
 
 Usage:
     python main.py
@@ -16,12 +16,13 @@ Features:
 - Comprehensive error handling and logging
 """
 
-# main.py
+###############################################################
 # Main menu script for Jira CSV to API automation toolkit.
 # - Provides menu options for importing pre-formatted work item CSVs and calendar exports
 # - Runs appropriate scripts via subprocess based on user selection
 # - Guides user through workflow for bulk import and field mapping
 # - Usage: Run to start the toolkit and select desired workflow
+###############################################################
 
 import os
 import sys
@@ -30,9 +31,11 @@ import logging
 from datetime import datetime
 
 sys.path.insert(0, './tools')
-# Now you can import scripts from tools/ as modules
+# Add tools/ to sys.path so scripts can be imported as modules
 
-# Configure logging
+###############################################################
+# Configure logging to file for menu operations
+###############################################################
 logging.basicConfig(
     filename="logs/main_menu.log",
     level=logging.INFO,
@@ -40,11 +43,16 @@ logging.basicConfig(
 )
 
 def clear_screen():
-    """Clear the terminal screen for better UX"""
+    """
+    Clear the terminal screen for better UX.
+    Works on Windows and Unix systems.
+    """
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def print_header():
-    """Print the application header with version info"""
+    """
+    Print the application header with version info.
+    """
     print("=" * 60)
     print("🚀 JIRA MANAGEMENT TOOLKIT v1.31")
     print("   Comprehensive Jira Operations Suite")
@@ -52,7 +60,9 @@ def print_header():
     print()
 
 def print_menu():
-    """Print the main menu with organized sections"""
+    """
+    Print the main menu with organized sections and shortcuts.
+    """
     print("📥 IMPORT FUNCTIONS")
     print("   1. Import Pre-Formatted Work Item CSV to Jira                [I]")
     print("   2. Import Calendar Export (Outlook/Teams) to Jira             [P]")
@@ -76,13 +86,20 @@ def print_menu():
     print("=" * 60)
 
 def run_script(script_name, args=None, description=""):
-    """Run a script with proper error handling and logging"""
+    """
+    Run a script with proper error handling and logging.
+    Uses the virtual environment's python if available, otherwise system python.
+    Args:
+        script_name (str): Path to the script to run.
+        args (list): List of arguments to pass to the script.
+        description (str): Description for logging and user feedback.
+    """
     try:
         print(f"\n🚀 {description}")
         print(f"📄 Running: {script_name}")
         print("-" * 40)
         
-        # Build command
+        # Build command for subprocess
         import subprocess
         import sys
         import os
@@ -117,7 +134,10 @@ def run_script(script_name, args=None, description=""):
         logging.error(f"Exception in {script_name}: {str(e)}")
 
 def export_submenu():
-    """Handle the export submenu for option 5"""
+    """
+    Handle the export submenu for option 5 (Export my Jira issues to CSV).
+    Allows user to choose between focused and full export.
+    """
     while True:
         print("\n" + "=" * 40)
         print("📤 EXPORT OPTIONS")
@@ -130,12 +150,14 @@ def export_submenu():
         choice = input("Please select an option (1-3): ").strip().lower()
         
         if choice in ['1']:
+            # Focused export for bulk transition
             filename = input("\nEnter filename for focused export (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
             if not filename:
                 filename = "output/bulk_transition_issues.csv"
             run_script("Tools/jira_export_my_issues.py", [filename], "Exporting focused fields")
             break
         elif choice in ['2']:
+            # Full export for comprehensive review
             filename = input("\nEnter filename for full export (or press Enter for 'my_issues_full.csv'): ").strip()
             if not filename:
                 filename = "my_issues_full.csv"
@@ -149,7 +171,10 @@ def export_submenu():
             print("❌ Invalid option. Please select 1-3.")
 
 def automated_workflow():
-    """Handle the automated export → bulk transition workflow"""
+    """
+    Handle the automated workflow: Export issues → Bulk transition.
+    Guides user through export, confirmation, and transition steps.
+    """
     print("\n🔄 AUTOMATED WORKFLOW: Export → Bulk Transition")
     print("=" * 50)
     
@@ -180,39 +205,48 @@ def automated_workflow():
         print(f"\n❌ Export failed - '{export_filename}' not found. Please check the export operation.")
 
 def handle_menu_choice(choice):
-    """Handle the user's menu choice"""
+    """
+    Handle the user's menu choice and run the appropriate workflow or script.
+    Returns False if the user chooses to exit, True otherwise.
+    """
     choice = choice.strip().lower()
     
     if choice in ['1', 'i']:
+        # Import pre-formatted work item CSV to Jira
         print("\nYou selected: Import Pre-Formatted Work Item CSV to Jira.")
         print("Use this option if your CSV is already formatted with all required Jira headers (e.g., output/output.csv, June.CSV, etc.).")
         print("If your CSV is a calendar export from Outlook or Teams, use option 2 instead.")
         run_script("jiraapi.py", [], "Importing work items to Jira")
     
     elif choice in ['2', 'p']:
+        # Import calendar export to Jira
         print("\nYou selected: Import Calendar Export (Outlook/Teams) to Jira.")
         print("Use this option if your CSV was exported directly from Outlook or Teams and needs formatting for Jira import.")
         print("This will run the calendar prep workflow and then import to Jira.")
         run_script("jiraapi.py", ["--prep-outlook"], "Preparing and importing calendar export via JiraAPI workflow")
         
     elif choice in ['3', 'u']:
+        # Update existing Jira issues from CSV
         csv_file = input("\nEnter CSV filename to update from (or press Enter for 'output/output.csv'): ").strip()
         if not csv_file:
             csv_file = "output/output.csv"
         run_script("Tools/jira_update_fields.py", [csv_file], f"Updating existing Jira issues from {csv_file}")
         
     elif choice in ['4', 'c']:
+        # Review and configure field mappings
         run_script("Tools/field_check.py", description="Reviewing and configuring field mappings")
         
     elif choice in ['5', 'e']:
+        # Export my Jira issues to CSV
         export_submenu()
         
     elif choice in ['6', 't']:
+        # Bulk transition issues to completion status
         csv_file = input("\nEnter CSV filename for bulk transition (or press Enter for 'output/bulk_transition_issues.csv'): ").strip()
         if not csv_file:
             csv_file = "output/bulk_transition_issues.csv"
         
-        # Check if file exists
+        # Check if file exists before running bulk transition
         if os.path.exists(csv_file):
             run_script("Tools/jira_bulk_transition.py", [csv_file], f"Bulk transitioning issues from {csv_file}")
         else:
@@ -220,15 +254,18 @@ def handle_menu_choice(choice):
             print("💡 Try option 5 to export your issues first, or option 7 for the complete workflow.")
             
     elif choice in ['7', 'w']:
+        # Complete workflow: Export → Bulk transition
         automated_workflow()
         
     elif choice in ['8', 'f']:
+        # Export Jira field metadata for reference
         filename = input("\nEnter filename for field metadata (or press Enter for 'jira_field_names.csv'): ").strip()
         if not filename:
             filename = "jira_field_names.csv"
         run_script("Tools/jira_field_names_export.py", [filename], "Exporting Jira field metadata")
         
     elif choice in ['9', 'r']:
+        # Check available transitions for an issue
         issue_key = input("\nEnter Jira issue key to check transitions (e.g., PROJ-123): ").strip()
         if issue_key:
             run_script("Tools/jira_check_transitions.py", [issue_key], f"Checking transitions for {issue_key}")
@@ -236,6 +273,7 @@ def handle_menu_choice(choice):
             print("❌ Issue key required.")
             
     elif choice in ['0', 'q', 'quit', 'exit']:
+        # Exit application
         return False
         
     else:
@@ -244,12 +282,17 @@ def handle_menu_choice(choice):
     return True
 
 def pause_for_user():
-    """Pause and wait for user input before returning to menu"""
+    """
+    Pause and wait for user input before returning to menu.
+    """
     print("\n" + "=" * 60)
     input("Press Enter to return to the main menu...")
 
 def main():
-    """Main application loop"""
+    """
+    Main application loop for the menu system.
+    Handles user input, runs workflows, and manages error handling.
+    """
     print("🚀 Starting Jira Management Toolkit...")
     logging.info("Application started")
     
@@ -263,7 +306,7 @@ def main():
             
             if not handle_menu_choice(choice):
                 break
-                
+            
             pause_for_user()
             
     except KeyboardInterrupt:

@@ -1,3 +1,9 @@
+"""
+test_jira_update_fields.py
+
+Unit tests for Jira field update logic in bulk update scripts.
+Usage: Run directly or via test runner to validate field update logic.
+"""
 import pytest
 from unittest.mock import patch, MagicMock
 import jira_update_fields
