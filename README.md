@@ -1,5 +1,165 @@
 # JiraCSVtoAPI Automation Toolkit
 
+## Setup and Installation
+
+### Prerequisites
+
+Before using this toolkit, you need to set up your development environment. Follow these steps to get everything ready:
+
+### 1. Install Python
+
+**For macOS:**
+- **Option A - Using Homebrew (Recommended):**
+  ```bash
+  # Install Homebrew if you don't have it
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  
+  # Install Python
+  brew install python
+  ```
+
+- **Option B - Download from Python.org:**
+  1. Visit [python.org/downloads](https://www.python.org/downloads/)
+  2. Download Python 3.9 or later
+  3. Run the installer and follow the prompts
+  4. **Important:** Check "Add Python to PATH" during installation
+
+**For Windows:**
+1. Visit [python.org/downloads](https://www.python.org/downloads/)
+2. Download Python 3.9 or later
+3. Run the installer
+4. **Important:** Check "Add Python to PATH" during installation
+5. Choose "Install for all users" if prompted
+
+**For Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-venv
+```
+
+### 2. Verify Python Installation
+
+Open a terminal/command prompt and verify Python is installed correctly:
+
+```bash
+python3 --version
+# Should show Python 3.9.x or later
+
+pip3 --version
+# Should show pip version information
+```
+
+**Note for Windows:** You may need to use `python` and `pip` instead of `python3` and `pip3`.
+
+### 3. Clone or Download the Repository
+
+**Option A - Using Git (Recommended):**
+```bash
+git clone https://github.com/JLopes-Enablon/JiraCSVtoAPI.git
+cd JiraCSVtoAPI
+```
+
+**Option B - Download ZIP:**
+1. Go to the [GitHub repository](https://github.com/JLopes-Enablon/JiraCSVtoAPI)
+2. Click "Code" → "Download ZIP"
+3. Extract the ZIP file and navigate to the folder
+
+### 4. Set Up Virtual Environment
+
+**Create and activate a virtual environment:**
+
+**For macOS/Linux:**
+```bash
+# Navigate to the project directory
+cd JiraCSVtoAPI
+
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate virtual environment
+source .venv/bin/activate
+
+# You should see (.venv) in your terminal prompt
+```
+
+**For Windows:**
+```cmd
+# Navigate to the project directory
+cd JiraCSVtoAPI
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+.venv\Scripts\activate
+
+# You should see (.venv) in your command prompt
+```
+
+### 5. Install Required Packages
+
+With your virtual environment activated, install the required Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+This will install:
+- `requests` - For Jira API communication
+- `python-dotenv` - For environment variable management
+- `pytest` - For running tests
+- `pytz` - For timezone handling
+
+### 6. Verify Installation
+
+Test that everything is working correctly:
+
+```bash
+python main.py
+```
+
+You should see the Jira Management Toolkit menu appear. Press `Ctrl+C` or `0` to exit.
+
+### 7. Deactivating the Virtual Environment
+
+When you're done working with the toolkit, you can deactivate the virtual environment:
+
+```bash
+deactivate
+```
+
+### 8. Future Usage
+
+Every time you want to use the toolkit:
+
+1. **Navigate to the project directory:**
+   ```bash
+   cd JiraCSVtoAPI
+   ```
+
+2. **Activate the virtual environment:**
+   - **macOS/Linux:** `source .venv/bin/activate`
+   - **Windows:** `.venv\Scripts\activate`
+
+3. **Run the toolkit:**
+   ```bash
+   python main.py
+   ```
+
+### Troubleshooting
+
+**Common Issues:**
+
+- **"python: command not found"**: Make sure Python is installed and added to your PATH
+- **"No module named 'requests'"**: Make sure you activated the virtual environment and ran `pip install -r requirements.txt`
+- **Permission errors**: On macOS/Linux, you may need to use `python3` and `pip3` instead of `python` and `pip`
+
+**Getting Help:**
+If you encounter issues during setup, please check that:
+1. Python 3.9+ is installed and in your PATH
+2. You've activated the virtual environment (you should see `(.venv)` in your prompt)
+3. All requirements are installed (`pip list` should show the required packages)
+
 ## Getting Required Jira Variables
 
 Before using this toolkit, you will need the following Jira variables:
