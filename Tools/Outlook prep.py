@@ -50,6 +50,12 @@ def remove_quotes_and_fix_dates(input_csv, temp_csv):
         if match:
             day, month, year = match.groups()
             return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        # Match d/m/yy or dd/mm/yy and convert to yyyy-mm-dd (assume 2000+)
+        match_yy = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2})$', date_str)
+        if match_yy:
+            day, month, year = match_yy.groups()
+            year = str(int(year) + 2000)  # Assumes 21 -> 2021, 25 -> 2025
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         return date_str
     with open(input_csv, encoding='utf-8') as infile, open(temp_csv, 'w', encoding='utf-8', newline='') as outfile:
         lines = infile.readlines()
@@ -94,15 +100,13 @@ def process_outlook_csv(input_csv, output_csv):
             "IssueType",
             "Parent",
             "Start Date",
-        match = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$', date_str)
-        if match:
-            day, month, year = match.groups()
-            # If year is 2 digits, assume 2000+ (can adjust if needed)
-            if len(year) == 2:
-                year = f"20{year}"
-            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        return date_str
+            "Story Points",
+            "Original Estimate",
+            "Time spent",
+            "Priority",
+            "Created Issue ID"
         ]
+        # Ensure there is no stray code here. The fix_date function should only exist in remove_quotes_and_fix_dates.
         writer = csv.DictWriter(outfile, fieldnames=output_headers)
         writer.writeheader()
         row_count = 0
