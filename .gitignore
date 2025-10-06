@@ -4,10 +4,13 @@
 __pycache__/
 *.pyc
 
-# Ignore output and log files
+# Ignore output and log files - SECURITY CRITICAL
 output.csv
 tracker.csv
 *.log
+*.log.backup
+*error.log*
+logs/
 jira_fields.json
 jiraapi_basic.py
 *.csv
