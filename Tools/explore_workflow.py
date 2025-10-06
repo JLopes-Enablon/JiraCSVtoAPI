@@ -14,7 +14,7 @@ def explore_all_transitions():
     jira_url = os.getenv("JIRA_URL")
     jira_email = os.getenv("JIRA_EMAIL") 
     jira_token = os.getenv("JIRA_TOKEN")
-    project_id = os.getenv("JIRA_PROJECT_ID", "CPESG")
+    project_id = os.getenv("JIRA_PROJECT_ID", "PROJ")
     
     jira = JiraAPI(jira_url, jira_email, jira_token)
     

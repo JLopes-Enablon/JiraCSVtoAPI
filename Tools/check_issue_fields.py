@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Check custom fields on CPESG-11786 to get the correct default values
+Check custom fields on PROJ-11786 to get the correct default values
 """
 
 import os
@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from jiraapi import JiraAPI
 
 def check_issue_custom_fields():
-    """Check custom fields on CPESG-11786"""
+    """Check custom fields on PROJ-11786"""
     
     load_dotenv()
     
@@ -19,7 +19,7 @@ def check_issue_custom_fields():
         api_token=os.getenv('JIRA_TOKEN')
     )
     
-    issue_key = "CPESG-11786"
+    issue_key = "PROJ-11786"
     
     print(f"🔍 Checking custom fields on {issue_key}...\n")
     

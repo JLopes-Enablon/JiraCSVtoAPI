@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive field checker for CPESG-11786
+Comprehensive field checker for PROJ-11786
 Maps field names to their IDs and values
 """
 
@@ -24,7 +24,7 @@ def check_all_custom_fields():
             
         jira = JiraAPI(base_url, email, api_token)
         
-        issue_key = "CPESG-11786"
+        issue_key = "PROJ-11786"
         print(f"🔍 Checking ALL fields on {issue_key}...")
         
         # Get the issue

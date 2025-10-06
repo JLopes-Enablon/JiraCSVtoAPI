@@ -176,7 +176,7 @@ def test_corrected_updates():
     session.auth = (email, token)
     
     # Test issue
-    test_issue = "CPESG-3239"
+    test_issue = "PROJ-3239"
     
     print("🧪 Testing Corrected Field Updates")
     print("=" * 40)

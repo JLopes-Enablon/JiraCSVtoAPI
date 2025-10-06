@@ -15,7 +15,7 @@ def test_tracker_append():
     jira_url = os.getenv("JIRA_URL")
     jira_email = os.getenv("JIRA_EMAIL") 
     jira_token = os.getenv("JIRA_TOKEN")
-    project_id = os.getenv("JIRA_PROJECT_ID", "CPESG")
+    project_id = os.getenv("JIRA_PROJECT_ID", "PROJ")
     
     if not all([jira_url, jira_email, jira_token]):
         print("❌ Missing environment variables")
@@ -26,7 +26,7 @@ def test_tracker_append():
     
     # Create a temporary test CSV with one item
     test_csv_content = """Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Time spent,Priority,Created Issue ID
-CPESG,TEST TRACKER - Single Item Test (DELETE AFTER),Story,,2025-10-06,1.0,1h,1h,Medium,"""
+PROJ,TEST TRACKER - Single Item Test (DELETE AFTER),Story,,2025-10-06,1.0,1h,1h,Medium,"""
     
     # Write test CSV to temporary file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as temp_file:

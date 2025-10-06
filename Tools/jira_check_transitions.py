@@ -13,7 +13,7 @@ Usage:
     python jira_check_transitions.py [issue_key]
 
 Example:
-    python jira_check_transitions.py CPESG-3239
+    python jira_check_transitions.py PROJ-3239
 """
 import os
 from dotenv import load_dotenv
@@ -56,7 +56,7 @@ def main():
     
     if len(sys.argv) < 2:
         print("Usage: python jira_check_transitions.py [issue_key]")
-        print("Example: python jira_check_transitions.py CPESG-3239")
+        print("Example: python jira_check_transitions.py PROJ-3239")
         return
     
     issue_key = sys.argv[1]

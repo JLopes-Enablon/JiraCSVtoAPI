@@ -40,7 +40,7 @@ def test_custom_field_defaults():
     try:
         # Create a test issue (custom defaults should be applied automatically)
         test_issue = jira.create_issue(
-            project_key="CPESG",
+            project_key="PROJ",
             summary="TEST - Custom Field Defaults (DELETE AFTER)",
             issue_type="Story"
         )

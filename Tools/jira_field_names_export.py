@@ -41,7 +41,7 @@ def main():
 
     # Prompt for sample issue key for editmeta
     if len(sys.argv) < 3:
-        issue_key = input("Enter a sample issue key to check editable fields (e.g. CPESG-123): ").strip()
+        issue_key = input("Enter a sample issue key to check editable fields (e.g. PROJ-123): ").strip()
     else:
         issue_key = sys.argv[2].strip()
     jira_url = get_env_var("JIRA_URL")

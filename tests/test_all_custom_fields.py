@@ -16,7 +16,7 @@ def test_all_custom_field_defaults():
         base_url = os.getenv('JIRA_URL')
         email = os.getenv('JIRA_EMAIL')
         api_token = os.getenv('JIRA_TOKEN')
-        project_id = os.getenv('JIRA_PROJECT_ID', 'CPESG')
+        project_id = os.getenv('JIRA_PROJECT_ID', 'PROJ')
         
         jira = JiraAPI(base_url, email, api_token)
         
@@ -69,7 +69,7 @@ def test_all_custom_field_defaults():
                             display_value = value['value']
                             expected_values = {
                                 'customfield_10255': 'CP&ESG',
-                                'customfield_10160': 'CPESG-Enablon',
+                                'customfield_10160': 'PROJ-Enablon',
                                 'customfield_10609': 'General',
                                 'customfield_10610': 'Managed Work',
                                 'customfield_10606': 'Yes',

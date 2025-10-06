@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quick check of CPESG-11789 custom fields
+Quick check of PROJ-11789 custom fields
 """
 
 import os
@@ -16,7 +16,7 @@ def main():
     
     jira = JiraAPI(base_url, email, api_token)
     
-    issue_key = "CPESG-11789"
+    issue_key = "PROJ-11789"
     print(f"🔍 Checking custom fields on {issue_key}...")
     
     try:

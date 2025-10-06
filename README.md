@@ -59,7 +59,7 @@ You'll be prompted for these on first run (stored securely in `.env`):
 - **JIRA_URL**: Your Jira instance URL (e.g., `https://yourcompany.atlassian.net`)
 - **JIRA_EMAIL**: Your Jira account email
 - **JIRA_TOKEN**: API token from Atlassian Account Settings
-- **JIRA_PROJECT_ID**: Project key (e.g., `PROJ`, `DEV`, `CPESG`)
+- **JIRA_PROJECT_ID**: Project key (e.g., `PROJ`, `DEV`, `TEST`)
 
 ## 📊 Supported Workflows
 

@@ -244,7 +244,7 @@ class JiraFieldTester:
 def main():
     if len(sys.argv) < 2:
         print("Usage: python test_field_updates.py <ISSUE_KEY>")
-        print("Example: python test_field_updates.py CPESG-3251")
+        print("Example: python test_field_updates.py PROJ-3251")
         sys.exit(1)
         
     issue_key = sys.argv[1]

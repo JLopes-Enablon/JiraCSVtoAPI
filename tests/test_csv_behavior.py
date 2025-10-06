@@ -15,7 +15,7 @@ def test_csv_behavior():
     
     # Create a test CSV without Created Issue ID
     test_csv_content = """Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Time spent,Priority
-CPESG,TEST CSV BEHAVIOR - Source Should Not Change,Story,,2025-10-06,1.0,1h,1h,Medium"""
+PROJ,TEST CSV BEHAVIOR - Source Should Not Change,Story,,2025-10-06,1.0,1h,1h,Medium"""
     
     test_csv_path = "test_csv_behavior.csv"
     with open(test_csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -67,7 +67,7 @@ CPESG,TEST CSV BEHAVIOR - Source Should Not Change,Story,,2025-10-06,1.0,1h,1h,M
             print(tracker_content)
             
             # Look for our test item
-            if "TEST CSV BEHAVIOR" in tracker_content and "CPESG-" in tracker_content:
+            if "TEST CSV BEHAVIOR" in tracker_content and "PROJ-" in tracker_content:
                 print("✅ SUCCESS: New issue properly added to tracker.csv!")
                 return True
             else:

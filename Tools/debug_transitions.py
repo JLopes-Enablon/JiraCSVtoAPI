@@ -124,4 +124,4 @@ if __name__ == "__main__":
         print("No issue key provided. Skipping debug test.")
         print("\nTo debug a specific issue, run:")
         print("python debug_transitions.py")
-        print("and enter an issue key like 'CPESG-1234'")
+        print("and enter an issue key like 'PROJ-1234'")

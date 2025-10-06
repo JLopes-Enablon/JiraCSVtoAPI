@@ -32,7 +32,7 @@ def test_story_points_fix():
     )
     
     # Test issue
-    test_issue = "CPESG-3239"
+    test_issue = "PROJ-3239"
     
     print("🧪 Testing Story Points Fix")
     print("=" * 30)
@@ -94,7 +94,7 @@ def test_original_estimate_behavior():
         api_token=os.getenv('JIRA_TOKEN')
     )
     
-    test_issue = "CPESG-3239"
+    test_issue = "PROJ-3239"
     
     print("\n🧪 Testing Original Estimate Behavior")
     print("=" * 40)

@@ -15,7 +15,7 @@ def comprehensive_resolution_test():
     jira_url = os.getenv("JIRA_URL")
     jira_email = os.getenv("JIRA_EMAIL") 
     jira_token = os.getenv("JIRA_TOKEN")
-    project_id = os.getenv("JIRA_PROJECT_ID", "CPESG")
+    project_id = os.getenv("JIRA_PROJECT_ID", "PROJ")
     
     if not all([jira_url, jira_email, jira_token]):
         print("Error: Missing environment variables")

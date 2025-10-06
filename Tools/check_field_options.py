@@ -36,7 +36,7 @@ def check_field_options():
             # Get create metadata for the project to see available options
             url = f"{jira.base_url}/rest/api/3/issue/createmeta"
             params = {
-                'projectKeys': 'CPESG',
+                'projectKeys': 'PROJ',
                 'issuetypeNames': 'Story',
                 'expand': 'projects.issuetypes.fields'
             }

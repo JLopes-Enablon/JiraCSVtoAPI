@@ -42,7 +42,7 @@ def fix_unresolved_closed_issues():
     
     if not issue_keys:
         print("No issue keys found in CSV files")
-        issue_keys_input = input("Enter issue keys separated by commas (e.g., CPESG-1234,CPESG-1235): ").strip()
+        issue_keys_input = input("Enter issue keys separated by commas (e.g., PROJ-1234,PROJ-1235): ").strip()
         if issue_keys_input:
             issue_keys = [key.strip() for key in issue_keys_input.split(',')]
         else:
