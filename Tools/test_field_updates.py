@@ -4,7 +4,13 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-#!/usr/bin/env python3
+#!/bin/bash
+# Auto-activate venv and run with venv python
+VENV="$(dirname "$0")/../.venv/bin/activate"
+if [ -f "$VENV" ]; then
+  source "$VENV"
+fi
+exec python "$0" "$@"
 """
 test_field_updates.py
 

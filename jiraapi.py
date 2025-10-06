@@ -25,6 +25,52 @@ import tempfile
 
 
 # -------------------------------------------------------------
+# Custom Field Defaults Management
+# -------------------------------------------------------------
+
+def load_custom_field_defaults() -> dict:
+    """
+    Load custom field defaults from environment variables.
+    Environment variables should be in format: FIELD_<FIELD_NAME>=<value>
+    
+    Returns:
+        Dictionary mapping field names to their default values
+    """
+    defaults = {}
+    
+    # Field ID mapping - maps friendly names to Jira field IDs
+    field_mapping = {
+        'DIVISION': 'customfield_10255',
+        'BUSINESS_UNIT': 'customfield_10160', 
+        'TASK_TYPE': 'customfield_10609',
+        'IPM_MANAGED': 'customfield_10606',
+        'LABELS': 'labels',
+        'ENVIRONMENT': 'customfield_10153',
+        'GBS_SERVICE': 'customfield_10605',
+        'TASK_SUB_TYPE': 'customfield_10610'
+    }
+    
+    load_dotenv()  # Ensure environment variables are loaded
+    
+    for env_key, field_id in field_mapping.items():
+        env_var = f"FIELD_{env_key}"
+        value = os.getenv(env_var)
+        
+        if value:
+            # Process the value based on field type
+            if field_id == 'labels':
+                # Labels should be an array of strings
+                defaults[field_id] = [label.strip() for label in value.split(',')]
+            else:
+                # Custom fields typically need option format for dropdowns
+                defaults[field_id] = {"value": value}
+            
+            print(f"🔧 Loaded default for {env_key}: {value}")
+    
+    return defaults
+
+
+# -------------------------------------------------------------
 # JiraAPI: Main class for interacting with Jira REST API
 # -------------------------------------------------------------
 
@@ -35,8 +81,10 @@ class JiraAPI:
 
     def transition_issue(self, issue_key: str, transition_name: str = "Closed") -> bool:
         """
-        Transition a Jira issue to a new status by name (e.g., Closed, In Progress, Backlog).
+        Transition a Jira issue to a new status by name (e.g., Closed, Done, In Progress, Backlog).
         Uses /transitions endpoint to find and perform the transition.
+        If the exact transition is not found, tries common alternatives.
+        For closing transitions, automatically sets resolution to "Done".
         Args:
             issue_key: The Jira issue key (e.g., 'PROJ-123').
             transition_name: The name of the transition to perform (default: 'Closed').
@@ -44,29 +92,340 @@ class JiraAPI:
             True if transition was successful, False otherwise.
         """
         try:
+            # Get available transitions with field details
+            url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+            # CRITICAL: Must use expand=transitions.fields to get resolution field access
+            params = {"expand": "transitions.fields"}
+            resp = self.session.get(url, params=params)
+            self._handle_response(resp)
+            transitions = resp.json().get("transitions", [])
+            
+            # Create a list of available transition names
+            available_transitions = [t["name"] for t in transitions]
+            
+            # Handle special case for "close_by_type" - find the best close transition
+            if transition_name == "close_by_type":
+                # Priority order for close transitions
+                close_options = ["Done", "Closed", "Resolve", "Complete", "Finished"]
+                transition_name = None
+                for close_option in close_options:
+                    if any(t["name"].lower() == close_option.lower() for t in transitions):
+                        transition_name = close_option
+                        break
+                
+                if not transition_name:
+                    self.logger.warning(f"No suitable close transition found for {issue_key}. Available: {', '.join(available_transitions)}")
+                    return False
+            
+            # Find the transition by name (case-insensitive)
+            transition = next((t for t in transitions if t["name"].lower() == transition_name.lower()), None)
+            
+            # If exact match not found, try alternatives
+            if not transition:
+                alternatives = {
+                    "done": ["Closed", "Complete", "Resolve", "Finished"],
+                    "closed": ["Done", "Complete", "Resolve", "Finished"],
+                    "complete": ["Done", "Closed", "Resolve", "Finished"],
+                    "resolve": ["Done", "Closed", "Complete", "Finished"]
+                }
+                
+                for alt in alternatives.get(transition_name.lower(), []):
+                    transition = next((t for t in transitions if t["name"].lower() == alt.lower()), None)
+                    if transition:
+                        self.logger.info(f"Using alternative transition '{alt}' instead of '{transition_name}' for {issue_key}")
+                        transition_name = alt
+                        break
+            
+            if not transition:
+                available = ", ".join(available_transitions)
+                self.logger.warning(f"Transition '{transition_name}' not found for {issue_key}. Available: {available}")
+                return False
+                
+            transition_id = transition["id"]
+            
+            # Check if this is a closing transition
+            close_transition_names = ["done", "closed", "complete", "resolve", "finished"]
+            is_closing_transition = transition_name.lower() in close_transition_names
+            
+            # Prepare transition data
+            post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+            transition_data = {"transition": {"id": transition_id}}
+            
+            # For closing transitions, always try to include resolution
+            if is_closing_transition:
+                transition_fields = transition.get("fields", {})
+                if "resolution" in transition_fields:
+                    resolution_options = transition_fields["resolution"].get("allowedValues", [])
+                    
+                    # Priority order for resolution values - prefer "Done" for closing
+                    preferred_resolutions = ["Done", "Completed", "Fixed", "Resolved"]
+                    selected_resolution = None
+                    
+                    for pref_res in preferred_resolutions:
+                        for res_option in resolution_options:
+                            if res_option.get("name", "").lower() == pref_res.lower():
+                                selected_resolution = {"id": res_option["id"]}
+                                self.logger.info(f"Setting resolution to '{pref_res}' for {issue_key}")
+                                break
+                        if selected_resolution:
+                            break
+                    
+                    # If no preferred resolution found, use first available (not Unresolved)
+                    if not selected_resolution and resolution_options:
+                        for res_option in resolution_options:
+                            if res_option.get("name", "").lower() != "unresolved":
+                                selected_resolution = {"id": res_option["id"]}
+                                self.logger.info(f"Using fallback resolution '{res_option.get('name')}' for {issue_key}")
+                                break
+                    
+                    # Add resolution to transition data if we found one
+                    if selected_resolution:
+                        transition_data["fields"] = {"resolution": selected_resolution}
+                    else:
+                        self.logger.warning(f"No suitable resolution found for {issue_key}, transition may set to Unresolved")
+                else:
+                    self.logger.warning(f"No resolution field available for transition '{transition_name}' on {issue_key}")
+            
+            # Perform the transition
+            post_resp = self.session.post(post_url, json=transition_data)
+            
+            if post_resp.ok:
+                self.logger.info(f"Successfully transitioned {issue_key} to '{transition_name}'")
+                
+                if is_closing_transition:
+                    # Verify the final status and resolution
+                    verification_issue = self.get_issue(issue_key)
+                    final_status = verification_issue.get("fields", {}).get("status", {}).get("name", "Unknown")
+                    final_resolution = verification_issue.get("fields", {}).get("resolution")
+                    final_resolution_name = final_resolution.get("name") if final_resolution else "Unresolved"
+                    
+                    if final_resolution_name == "Unresolved":
+                        self.logger.warning(f"Issue {issue_key} closed but resolution remains 'Unresolved'")
+                        self.logger.warning("This may indicate a workflow configuration issue")
+                    else:
+                        self.logger.info(f"✅ Issue {issue_key} successfully closed with resolution: {final_resolution_name}")
+                
+                return True
+            else:
+                error_msg = f"Failed to transition {issue_key} to '{transition_name}': {post_resp.status_code} {post_resp.text}"
+                self.logger.error(error_msg)
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Failed to transition {issue_key} to '{transition_name}': {e}")
+            return False
+            
+    def find_closing_transition_with_resolution(self, issue_key: str) -> dict:
+        """
+        Find a transition that leads to a closed state AND allows setting resolution.
+        This is crucial because many Jira configurations only allow resolution 
+        to be set during specific transitions, not as a separate field update.
+        
+        Args:
+            issue_key: The Jira issue key
+        Returns:
+            Dict with transition info and resolution options, or empty dict if none found
+        """
+        try:
             # Get available transitions
             url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
             resp = self.session.get(url)
             self._handle_response(resp)
             transitions = resp.json().get("transitions", [])
-            # Find the transition by name (case-insensitive)
-            transition = next((t for t in transitions if t["name"].lower() == transition_name.lower()), None)
-            if not transition:
-                available = ", ".join([t["name"] for t in transitions])
-                self.logger.warning(f"Transition '{transition_name}' not found for {issue_key}. Available: {available}")
-                return False
-            transition_id = transition["id"]
-            # Perform the transition
-            post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
-            data = {"transition": {"id": transition_id}}
-            post_resp = self.session.post(post_url, json=data)
-            self._handle_response(post_resp)
-            self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
-            return True
+            
+            # Look for transitions that have resolution field AND lead to closed states
+            closing_transitions_with_resolution = []
+            
+            for transition in transitions:
+                trans_name = transition.get("name", "").lower()
+                trans_fields = transition.get("fields", {})
+                
+                # Check if this transition leads to a closed state
+                is_closing = any(keyword in trans_name for keyword in 
+                               ["done", "closed", "complete", "resolve", "finish"])
+                
+                # Check if resolution field is available in this transition
+                has_resolution = "resolution" in trans_fields
+                
+                if is_closing and has_resolution:
+                    resolution_options = trans_fields["resolution"].get("allowedValues", [])
+                    closing_transitions_with_resolution.append({
+                        "transition": transition,
+                        "name": transition.get("name"),
+                        "id": transition.get("id"),
+                        "resolution_options": resolution_options
+                    })
+            
+            # Return the best option (prefer "Done" > "Closed" > others)
+            priority_order = ["done", "closed", "complete", "resolve", "finish"]
+            for priority in priority_order:
+                for trans_info in closing_transitions_with_resolution:
+                    if priority in trans_info["name"].lower():
+                        self.logger.info(f"Found closing transition with resolution: {trans_info['name']} for {issue_key}")
+                        return trans_info
+            
+            # If no priority match, return the first one found
+            if closing_transitions_with_resolution:
+                return closing_transitions_with_resolution[0]
+            
+            return {}
+            
         except Exception as e:
-            self.logger.error(f"Failed to transition {issue_key} to '{transition_name}': {e}")
+            self.logger.error(f"Failed to find closing transition with resolution for {issue_key}: {e}")
+            return {}
+
+    def transition_to_done_with_resolution(self, issue_key: str, resolution_name: str = "Done") -> bool:
+        """
+        Transition an issue to a closed state while setting the resolution.
+        This method finds transitions that allow both status change and resolution setting.
+        If no such transition exists, it tries a multi-step approach.
+        
+        Args:
+            issue_key: The Jira issue key
+            resolution_name: Preferred resolution name (default: "Done")
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # First, check current status
+            issue = self.get_issue(issue_key)
+            current_status = issue.get("fields", {}).get("status", {}).get("name", "Unknown")
+            
+            # If already closed, try to set resolution directly
+            closed_statuses = ["done", "closed", "complete", "resolved", "finished"]
+            if current_status.lower() in closed_statuses:
+                self.logger.info(f"{issue_key} is already closed ({current_status}), attempting to set resolution")
+                return self.set_resolution(issue_key, resolution_name)
+            
+            # Find a transition that supports resolution setting
+            trans_info = self.find_closing_transition_with_resolution(issue_key)
+            
+            if trans_info:
+                # Found a transition with resolution - use it
+                resolution_options = trans_info["resolution_options"]
+                selected_resolution = None
+                
+                # Priority order for resolution values
+                preferred_resolutions = [resolution_name, "Done", "Completed", "Fixed", "Resolved"]
+                
+                for pref_res in preferred_resolutions:
+                    for res_option in resolution_options:
+                        if res_option.get("name", "").lower() == pref_res.lower():
+                            selected_resolution = {"id": res_option["id"]}
+                            self.logger.info(f"Will set resolution to '{pref_res}' for {issue_key}")
+                            break
+                    if selected_resolution:
+                        break
+                
+                # If no preferred resolution found, use the first available
+                if not selected_resolution and resolution_options:
+                    first_resolution = resolution_options[0]
+                    selected_resolution = {"id": first_resolution["id"]}
+                    self.logger.info(f"Using first available resolution '{first_resolution.get('name', 'Unknown')}' for {issue_key}")
+                
+                if not selected_resolution:
+                    self.logger.warning(f"No resolution options available for transition {trans_info['name']} on {issue_key}")
+                    return self.transition_issue(issue_key, "Closed")
+                
+                # Perform the transition with resolution
+                post_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/transitions"
+                transition_data = {
+                    "transition": {"id": trans_info["id"]},
+                    "fields": {"resolution": selected_resolution}
+                }
+                
+                self.logger.debug(f"Transition data for {issue_key}: {transition_data}")
+                
+                post_resp = self.session.post(post_url, json=transition_data)
+                self._handle_response(post_resp)
+                
+                self.logger.info(f"Successfully transitioned {issue_key} to '{trans_info['name']}' with resolution")
+                return True
+            else:
+                # No transition with resolution found - try alternative approach
+                self.logger.info(f"No resolution-aware transition found for {issue_key}, using fallback approach")
+                
+                # Step 1: Transition to closed state
+                success = self.transition_issue(issue_key, "Closed")
+                if not success:
+                    return False
+                
+                # Step 2: Try to set resolution after transition
+                # Note: This might not work in all Jira configurations
+                return self.set_resolution(issue_key, resolution_name)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to transition {issue_key} to done with resolution: {e}")
             return False
-        self.logger.info(f"Transitioned {issue_key} to '{transition_name}'")
+    
+    def get_available_resolutions(self, issue_key: str) -> list:
+        """
+        Get available resolution values for an issue.
+        Args:
+            issue_key: The Jira issue key.
+        Returns:
+            List of available resolution options.
+        """
+        try:
+            url = f"{self.base_url}/rest/api/3/issue/{issue_key}/editmeta"
+            resp = self.session.get(url)
+            self._handle_response(resp)
+            editmeta = resp.json()
+            
+            resolution_field = editmeta.get("fields", {}).get("resolution", {})
+            return resolution_field.get("allowedValues", [])
+        except Exception as e:
+            self.logger.error(f"Failed to get available resolutions for {issue_key}: {e}")
+            return []
+
+    def set_resolution(self, issue_key: str, resolution_name: str = "Done") -> bool:
+        """
+        Set the resolution field for an issue without changing its status.
+        Args:
+            issue_key: The Jira issue key.
+            resolution_name: The resolution to set (default: 'Done').
+        Returns:
+            True if resolution was set successfully, False otherwise.
+        """
+        try:
+            # Get available resolutions
+            available_resolutions = self.get_available_resolutions(issue_key)
+            
+            # Find the resolution by name
+            resolution = next(
+                (r for r in available_resolutions if r.get("name", "").lower() == resolution_name.lower()), 
+                None
+            )
+            
+            if not resolution:
+                # Try common alternatives
+                alternatives = ["Done", "Completed", "Fixed", "Resolved"]
+                for alt in alternatives:
+                    resolution = next(
+                        (r for r in available_resolutions if r.get("name", "").lower() == alt.lower()), 
+                        None
+                    )
+                    if resolution:
+                        self.logger.info(f"Using alternative resolution '{alt}' instead of '{resolution_name}' for {issue_key}")
+                        break
+            
+            if not resolution:
+                available = [r.get("name", "Unknown") for r in available_resolutions]
+                self.logger.warning(f"Resolution '{resolution_name}' not found for {issue_key}. Available: {available}")
+                return False
+            
+            # Update the resolution field
+            url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
+            data = {"fields": {"resolution": {"id": resolution["id"]}}}
+            resp = self.session.put(url, json=data)
+            self._handle_response(resp)
+            
+            self.logger.info(f"Set resolution to '{resolution['name']}' for {issue_key}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set resolution for {issue_key}: {e}")
+            return False
     def __init__(self, base_url: str, email: str, api_token: str) -> None:
         """
         Initialize the JiraAPI client and session.
@@ -115,37 +474,51 @@ class JiraAPI:
 
     def create_issue(self, project_key: str, summary: str, issue_type: str = "Story", assignee: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
         """
-        Create a new Jira issue with only safe fields (custom fields are handled post-creation).
-        Excludes custom fields on creation for reliability.
+        Create a new Jira issue with custom field defaults from .env file applied automatically.
+        Custom field defaults are loaded from environment variables in format: FIELD_<NAME>=<value>
         Args:
             project_key: The Jira project key.
             summary: The summary/title of the issue.
             issue_type: The type of issue (default: 'Story').
             assignee: (Optional) Assignee username (for legacy Jira only).
-            **fields: Additional fields for the issue.
+            **fields: Additional fields for the issue (these override defaults).
         Returns:
             The created issue data as a dictionary.
         Raises:
             Exception: If the API call fails.
         """
         url = f"{self.base_url}/rest/api/3/issue"
+        
+        # Start with basic required fields
         fields_dict = {
             "project": {"key": project_key},
             "summary": summary,
             "issuetype": {"name": issue_type},
         }
+        
         if assignee:
             fields_dict["assignee"] = {"name": assignee}
-        # Only set fields that are safe to set on create (exclude custom fields like Story Points)
-        safe_fields = {k: v for k, v in fields.items() if not k.startswith('customfield_')}
-        fields_dict.update(safe_fields)
+        
+        # Load and apply custom field defaults from .env
+        try:
+            custom_defaults = load_custom_field_defaults()
+            if custom_defaults:
+                self.logger.info(f"Applying {len(custom_defaults)} custom field defaults from .env")
+                fields_dict.update(custom_defaults)
+        except Exception as e:
+            self.logger.warning(f"Failed to load custom field defaults: {e}")
+        
+        # Apply any explicitly provided fields (these override defaults)
+        fields_dict.update(fields)
+        
         data = {"fields": fields_dict}
         self.logger.info(f"Creating issue in project {project_key} with summary '{summary}'")
         self.logger.debug(f"Payload for issue creation: {data}")
+        
         response = self.session.post(url, json=data)
         self._handle_response(response)
         issue_key = response.json().get("key", "<unknown>")
-        self.logger.info(f"Created issue: {issue_key} in project {project_key}")
+        self.logger.info(f"✅ Created issue: {issue_key} in project {project_key}")
         return response.json()
 
     def _update_assignee(self, issue_key: str, account_id: Optional[str] = None, name: Optional[str] = None) -> None:
@@ -211,40 +584,189 @@ class JiraAPI:
         **fields: Any
     ) -> Dict[str, Any]:
         """
-        Create a Jira sub-task under a parent issue. Only safe fields are set on creation.
+        Create a Jira sub-task under a parent issue with custom field defaults applied.
         Args:
             project_key: The Jira project key.
             summary: The summary/title of the sub-task.
             parent_key: The key of the parent story.
             assignee: (Optional) Assignee username (for legacy Jira only).
             priority: (Optional) Priority name.
-            **fields: Additional fields for the sub-task.
+            **fields: Additional fields for the sub-task (these override defaults).
         Returns:
             The created sub-task data as a dictionary.
         Raises:
             Exception: If the API call fails.
         """
         url = f"{self.base_url}/rest/api/3/issue"
+        
+        # Start with basic required fields
         subtask_fields = {
             "project": {"key": project_key},
             "summary": summary,
             "issuetype": {"name": "Sub-task"},
             "parent": {"key": parent_key},
         }
+        
         if assignee:
             subtask_fields["assignee"] = {"name": assignee}
         if priority:
             subtask_fields["priority"] = {"name": priority}
-        # Only set safe fields (exclude custom fields)
-        safe_fields = {k: v for k, v in fields.items() if not k.startswith('customfield_')}
-        subtask_fields.update(safe_fields)
+        
+        # Load and apply custom field defaults from .env
+        try:
+            custom_defaults = load_custom_field_defaults()
+            if custom_defaults:
+                self.logger.info(f"Applying {len(custom_defaults)} custom field defaults to sub-task")
+                subtask_fields.update(custom_defaults)
+        except Exception as e:
+            self.logger.warning(f"Failed to load custom field defaults for sub-task: {e}")
+        
+        # Apply any explicitly provided fields (these override defaults)
+        subtask_fields.update(fields)
+        
         data = {"fields": subtask_fields}
         self.logger.debug(f"Creating sub-task under parent {parent_key} in project {project_key} with summary '{summary}'")
+        
         response = self.session.post(url, json=data)
         self._handle_response(response)
         subtask_key = response.json().get("key", "<unknown>")
-        self.logger.info(f"Created sub-task: {subtask_key} under parent {parent_key}")
+        self.logger.info(f"✅ Created sub-task: {subtask_key} under parent {parent_key}")
         return response.json()
+
+    def update_issue(self, issue_key: str, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update an existing Jira issue with the provided fields.
+        Args:
+            issue_key: The Jira issue key (e.g., 'PROJ-123').
+            fields: Dictionary of fields to update.
+        Returns:
+            The response from the API.
+        Raises:
+            Exception: If the API call fails.
+        """
+        url = f"{self.base_url}/rest/api/3/issue/{issue_key}"
+        data = {"fields": fields}
+        
+        self.logger.info(f"Updating issue {issue_key} with fields: {list(fields.keys())}")
+        self.logger.debug(f"Update payload: {data}")
+        
+        response = self.session.put(url, json=data)
+        self._handle_response(response)
+        
+        self.logger.info(f"Successfully updated issue {issue_key}")
+        return response.json() if response.text else {}
+
+    def update_issue_fields(self, issue_key: str, story_points=None, original_estimate=None, field_mapping=None, **kwargs):
+        """
+        Update issue fields with proper validation and field checking.
+        This method handles Story Points, Original Estimate, and other custom fields safely.
+        Args:
+            issue_key: The Jira issue key.
+            story_points: Story Points value to set.
+            original_estimate: Original Estimate value to set.
+            field_mapping: Mapping of field names to Jira field IDs.
+            **kwargs: Additional fields to update.
+        Returns:
+            List of any errors encountered during the update.
+        """
+        errors = []
+        try:
+            # Get current issue data
+            current = self.get_issue(issue_key)
+            current_fields = current.get("fields", {})
+        except Exception as e:
+            error_msg = f"Failed to fetch current issue {issue_key}: {e}"
+            self.logger.error(error_msg)
+            return [error_msg]
+
+        update_fields = {}
+        
+        # Get editable fields for this issue
+        editmeta_url = f"{self.base_url}/rest/api/3/issue/{issue_key}/editmeta"
+        editmeta_response = self.session.get(editmeta_url)
+        editable_fields = {}
+        if editmeta_response.ok:
+            editable_fields = editmeta_response.json().get('fields', {})
+            self.logger.debug(f"Editable fields for {issue_key}: {list(editable_fields.keys())}")
+        else:
+            self.logger.warning(f"Failed to fetch editable fields for {issue_key}: {editmeta_response.status_code}")
+
+        # Handle Story Points
+        if story_points is not None and str(story_points).strip() not in ["", "none", "None"]:
+            sp_fields_to_try = [
+                field_mapping.get('Story Points', 'customfield_10146') if field_mapping else 'customfield_10146',
+                'customfield_10016', 
+                'customfield_10146'
+            ]
+            for sp_field in sp_fields_to_try:
+                if sp_field in editable_fields:
+                    try:
+                        update_fields[sp_field] = float(story_points)
+                        self.logger.info(f"Will update Story Points field {sp_field} for {issue_key} to {story_points}")
+                        break
+                    except ValueError:
+                        self.logger.warning(f"Invalid Story Points value '{story_points}' for {issue_key}")
+                        break
+                else:
+                    self.logger.debug(f"Story Points field {sp_field} not editable for {issue_key}")
+
+        # Handle Original Estimate
+        if original_estimate is not None and str(original_estimate).strip() not in ["", "none", "None"]:
+            oe_fields_to_try = ["timetracking", "timeoriginalestimate"]
+            for oe_field in oe_fields_to_try:
+                if oe_field in editable_fields:
+                    if oe_field == "timetracking":
+                        update_fields[oe_field] = {"originalEstimate": str(original_estimate).strip()}
+                    else:
+                        update_fields[oe_field] = str(original_estimate).strip()
+                    self.logger.info(f"Will update Original Estimate field {oe_field} for {issue_key} to {original_estimate}")
+                    break
+                else:
+                    self.logger.debug(f"Original Estimate field {oe_field} not editable for {issue_key}")
+
+        # Handle other fields from kwargs
+        for field_name, field_value in kwargs.items():
+            if field_name.lower() in ["time_spent", "time spent"]:
+                continue  # Skip time spent, handle via worklog
+            
+            # Map field name to Jira field ID
+            jira_field = field_mapping.get(field_name, field_name.replace(" ", "_")) if field_mapping else field_name.replace(" ", "_")
+            
+            # Special handling for certain fields
+            if field_name.lower() == "priority":
+                if jira_field in editable_fields and field_value:
+                    update_fields["priority"] = {"name": field_value}
+            elif field_name.lower() == "parent":
+                if jira_field in editable_fields and field_value:
+                    update_fields["parent"] = {"key": field_value}
+            elif field_name.lower() == "components":
+                if jira_field in editable_fields and field_value:
+                    comps = [c.strip() for c in str(field_value).split(",") if c.strip()]
+                    update_fields["components"] = [{"name": c} for c in comps]
+            elif field_name.lower() == "labels":
+                if jira_field in editable_fields and field_value:
+                    labels = [l.strip() for l in str(field_value).split(",") if l.strip()]
+                    update_fields["labels"] = labels
+            else:
+                # Generic field handling
+                if jira_field in editable_fields and field_value is not None:
+                    current_value = current_fields.get(jira_field)
+                    if str(field_value) != str(current_value):
+                        update_fields[jira_field] = field_value
+
+        # Perform the update if there are fields to update
+        if update_fields:
+            try:
+                self.update_issue(issue_key, update_fields)
+                self.logger.info(f"Successfully updated {issue_key} with fields: {list(update_fields.keys())}")
+            except Exception as e:
+                error_msg = f"Failed to update {issue_key}: {e}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
+        else:
+            self.logger.info(f"No updates needed for {issue_key}")
+
+        return errors
 
     def _handle_response(self, response: requests.Response) -> None:
         """
@@ -286,6 +808,9 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
     subtasks = []          # List of (idx, row) for sub-tasks
     all_rows = []          # All rows from the CSV
 
+    # Track which rows were initially empty (for tracker.csv)
+    initially_empty_indices = set()
+    
     # Read and classify rows from the CSV file
     # Only process rows that have not yet been imported (no Created Issue ID)
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
@@ -294,6 +819,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             all_rows.append(row)
             # Only process rows that have not yet been imported (no Created Issue ID)
             if not row.get("Created Issue ID"):
+                initially_empty_indices.add(idx)
                 issue_type = (row.get("IssueType") or "").strip().lower()
                 if issue_type == "sub-task":
                     # Collect sub-tasks for later processing
@@ -312,19 +838,41 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             issue_map[row["Created Issue ID"]] = row["Created Issue ID"]
             issue_map[summary_key] = row["Created Issue ID"]
 
-    # Expanded transition options: 6 choices for workflow status
+    # Dynamically query available close transitions for each issue type
+    print("\nQuerying available close transitions for each issue type...")
+    issue_types_to_check = ["Epic", "Story", "Task", "Sub-task"]
+    close_transitions = {}
+    sample_issue_keys = {}
+    # Find a sample issue key for each type (from all_rows)
+    for t in issue_types_to_check:
+        for row in all_rows:
+            if (row.get("IssueType") or "").strip().lower() == t.lower() and row.get("Created Issue ID"):
+                sample_issue_keys[t] = row["Created Issue ID"]
+                break
+    for t, key in sample_issue_keys.items():
+        try:
+            url = f"{jira.base_url}/rest/api/3/issue/{key}/transitions"
+            resp = jira.session.get(url)
+            transitions = resp.json().get("transitions", [])
+            close_names = [tr["name"] for tr in transitions if tr["name"].lower() in ["closed", "done"]]
+            close_transitions[t] = close_names if close_names else [tr["name"] for tr in transitions]
+        except Exception as e:
+            close_transitions[t] = []
+    print("\nAvailable close transitions by issue type:")
+    for t in issue_types_to_check:
+        print(f"  {t}: {close_transitions.get(t, [])}")
     print("\nSelect a status transition mode for created issues:")
-    print("  1. Closed (default, prompt for each issue)")
+    print("  1. Use default close for each type (prompt for each issue)")
     print("  2. In Progress (prompt for each issue)")
     print("  3. Backlog (prompt for each issue)")
-    print("  4. Closed All (all issues will be marked as Closed, no further prompts)")
+    print("  4. Close All (all issues will be marked as close for their type, no further prompts)")
     print("  5. In Progress All (all issues will be marked as In Progress, no further prompts)")
     print("  6. Backlog All (all issues will be marked as Backlog, no further prompts)")
     mode_choice = input("Choose [1-6] or press Enter for default: ").strip()
     if mode_choice == "4":
         transition_mode = "all"
-        transition_all_status = "Closed"
-        transition_default = "Closed"
+        transition_all_status = "close_by_type"
+        transition_default = "close_by_type"
     elif mode_choice == "5":
         transition_mode = "all"
         transition_all_status = "In Progress"
@@ -341,7 +889,7 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         transition_default = "Backlog"
     else:
         transition_mode = "prompt"
-        transition_default = "Closed"
+        transition_default = "close_by_type"
 
     # Create all top-level issues (Story, Task, etc.)
     # For each, create in Jira, update mapping, and perform post-creation updates
@@ -377,7 +925,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         # Transition logic (prompt or all)
         if transition_mode == "all":
             try:
-                jira.transition_issue(issue_key, transition_all_status)
+                # Use resolution-aware transition for closing states
+                if transition_all_status == "close_by_type":
+                    jira.transition_to_done_with_resolution(issue_key, "Done")
+                else:
+                    jira.transition_issue(issue_key, transition_all_status)
             except Exception as e:
                 logger.warning(f"Could not transition {issue_key} to '{transition_all_status}': {e}")
         elif transition_mode == "prompt":
@@ -400,7 +952,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 transition_name = transition_default
             if transition_name:
                 try:
-                    jira.transition_issue(issue_key, transition_name)
+                    # Use resolution-aware transition for closing states
+                    if transition_name.lower() in ["close_by_type", "done", "closed", "complete", "resolve", "finished"]:
+                        jira.transition_to_done_with_resolution(issue_key, "Done")
+                    else:
+                        jira.transition_issue(issue_key, transition_name)
                 except Exception as e:
                     logger.warning(f"Could not transition {issue_key} to '{transition_name}': {e}")
         # 1. Story Points (for all issue types and sub-tasks if allowed)
@@ -431,24 +987,20 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                     logger.warning(f"Could not check editable fields for {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Story Points for {issue_key}: {e}")
-        # 2. Original Estimate (timetracking) - Skip for Sub-tasks as it's not editable
-        # Try both timetracking and timeoriginalestimate fields
+        # 2. Original Estimate (timetracking) - Always attempt for all issue types, including sub-tasks
         original_estimate = row.get("Original Estimate")
-        if original_estimate and str(original_estimate).strip() != "" and issue_type.lower() != "sub-task":
+        if original_estimate and str(original_estimate).strip() != "":
             try:
                 # Check if timetracking is editable for this issue type
                 editmeta_url = f"{jira.base_url}/rest/api/3/issue/{issue_key}/editmeta"
                 editmeta_response = jira.session.get(editmeta_url)
-                
                 if editmeta_response.ok:
                     editable_fields = editmeta_response.json().get('fields', {})
-                    
                     # Try different time tracking field approaches
                     time_fields_to_try = [
                         ('timetracking', {"fields": {"timetracking": {"originalEstimate": str(original_estimate).strip()}}}),
                         ('timeoriginalestimate', {"fields": {"timeoriginalestimate": str(original_estimate).strip()}})
                     ]
-                    
                     updated = False
                     for field_name, update_data in time_fields_to_try:
                         if field_name in editable_fields:
@@ -460,15 +1012,12 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                                 break
                             else:
                                 logger.debug(f"Failed to update Original Estimate using {field_name}: {response.status_code}")
-                    
                     if not updated:
-                        logger.info(f"Original Estimate not supported for {issue_key} (issue type: {issue_type}) - this is normal for Sub-tasks")
+                        logger.info(f"Original Estimate not supported for {issue_key} (issue type: {issue_type})")
                 else:
                     logger.warning(f"Could not check editable fields for Original Estimate on {issue_key}")
             except Exception as e:
                 logger.warning(f"Could not update Original Estimate for {issue_key}: {e}")
-        elif issue_type.lower() == "sub-task":
-            logger.debug(f"Skipping Original Estimate for Sub-task {issue_key} - not supported in this Jira configuration")
         # 3. Start Date (custom field, must match YYYY-MM-DD)
         start_date = row.get("Start Date")
         start_date_field = os.environ.get('JIRA_START_DATE_FIELD', 'customfield_10257')
@@ -562,7 +1111,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
         # Transition logic for sub-tasks
         if transition_mode == "all":
             try:
-                jira.transition_issue(subtask_key, transition_all_status)
+                # Use resolution-aware transition for closing states
+                if transition_all_status == "close_by_type":
+                    jira.transition_to_done_with_resolution(subtask_key, "Done")
+                else:
+                    jira.transition_issue(subtask_key, transition_all_status)
             except Exception as e:
                 logger.warning(f"Could not transition sub-task {subtask_key} to '{transition_all_status}': {e}")
         elif transition_mode == "prompt":
@@ -585,7 +1138,11 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
                 transition_name = transition_default
             if transition_name:
                 try:
-                    jira.transition_issue(subtask_key, transition_name)
+                    # Use resolution-aware transition for closing states
+                    if transition_name.lower() in ["close_by_type", "done", "closed", "complete", "resolve", "finished"]:
+                        jira.transition_to_done_with_resolution(subtask_key, "Done")
+                    else:
+                        jira.transition_issue(subtask_key, transition_name)
                 except Exception as e:
                     logger.warning(f"Could not transition sub-task {subtask_key} to '{transition_name}': {e}")
         # 1. Story Points (if allowed) - Using correct field ID
@@ -669,28 +1226,35 @@ def import_stories_and_subtasks(csv_path: str, jira: JiraAPI, field_mapping=None
             except Exception as e:
                 logger.warning(f"Could not set parent for sub-task {subtask_key}: {e}")
 
-    # Write back the Created Issue ID to output/output.csv for tracking
+    # Append only newly created issues to output/tracker.csv for persistent tracking
+    # NOTE: The source CSV file (output.csv) is NOT modified - only tracker.csv gets the Created Issue IDs
     if all_rows and "Created Issue ID" in all_rows[0]:
         # Always use the project root's output directory for consistency
         project_root = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(project_root, "output")
         os.makedirs(output_dir, exist_ok=True)
-        output_csv_path = os.path.join(output_dir, "output.csv")  # Always use output.csv as the standard name
-        with open(output_csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=all_rows[0].keys())
-            writer.writeheader()
-            for row in all_rows:
-                writer.writerow(row)
-
-        # Append all rows to output/tracker.csv for persistent tracking
-        tracker_path = os.path.join(output_dir, "tracker.csv")
-        write_header = not os.path.isfile(tracker_path)
-        with open(tracker_path, 'a', newline='', encoding='utf-8') as trackerfile:
-            tracker_writer = csv.DictWriter(trackerfile, fieldnames=all_rows[0].keys())
-            if write_header:
-                tracker_writer.writeheader()
-            for row in all_rows:
-                tracker_writer.writerow(row)
+        
+        # Only append newly created issues to tracker.csv
+        # Only append rows that were initially empty but now have a Created Issue ID
+        new_issues = []
+        for idx, row in enumerate(all_rows):
+            if idx in initially_empty_indices and row.get("Created Issue ID"):
+                new_issues.append(row)
+        
+        if new_issues:
+            tracker_path = os.path.join(output_dir, "tracker.csv")
+            write_header = not os.path.isfile(tracker_path)
+            
+            with open(tracker_path, 'a', newline='', encoding='utf-8') as trackerfile:
+                tracker_writer = csv.DictWriter(trackerfile, fieldnames=all_rows[0].keys())
+                if write_header:
+                    tracker_writer.writeheader()
+                for row in new_issues:
+                    tracker_writer.writerow(row)
+            
+            logger.info(f"Appended {len(new_issues)} newly created issues to {tracker_path}")
+        else:
+            logger.info("No new issues to append to tracker.csv")
 
 ###############################################################
 # Main script entrypoint and environment setup

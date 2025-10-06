@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/bin/bash
+# Auto-activate venv and run with venv python
+VENV="$(dirname "$0")/../.venv/bin/activate"
+if [ -f "$VENV" ]; then
+  source "$VENV"
+fi
+exec python "$0" "$@"
 """
 fix_field_updates.py
 
