@@ -192,7 +192,10 @@ The toolkit supports automatic custom field population. Configure defaults in yo
 FIELD_DIVISION='YourDivisionValue'
 FIELD_BUSINESS_UNIT='YourBusinessUnitValue'
 FIELD_TASK_TYPE='YourTaskTypeValue'
+FIELD_TASK_SUB_TYPE='YourTaskSubTypeValue'
 FIELD_IPM_MANAGED='Yes/No'
+FIELD_GBS_SERVICE='Yes/No'
+FIELD_ENVIRONMENT='YourEnvironmentValue'
 FIELD_LABELS='your,labels,here'
 ```
 
