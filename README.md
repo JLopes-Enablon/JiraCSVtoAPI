@@ -1,315 +1,226 @@
-# JiraCSVtoAPI Automation Toolkit
+# 🚀 Jira CSV to API Automation Toolkit
 
-## Setup and Installation
+A comprehensive Python toolkit for automating Jira operations via CSV imports, bulk updates, and API integration. Streamline your workflow management with powerful automation tools.
 
-### Prerequisites
+## ⚡ Quick Start
 
-Before using this toolkit, you need to set up your development environment. Follow these steps to get everything ready:
+### 🎯 Main Scripts (What You Need)
 
-### 1. Install Python
+This toolkit has **2 core scripts** that handle everything:
 
-**For macOS:**
-- **Option A - Using Homebrew (Recommended):**
-  ```bash
-  # Install Homebrew if you don't have it
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  
-  # Install Python
-  brew install python
-  ```
+1. **`main.py`** - Interactive menu system for all operations
+2. **`jiraapi.py`** - Core API engine and direct CSV import tool
 
-- **Option B - Download from Python.org:**
-  1. Visit [python.org/downloads](https://www.python.org/downloads/)
-  2. Download Python 3.9 or later
-  3. Run the installer and follow the prompts
-  4. **Important:** Check "Add Python to PATH" during installation
+### 🚀 Getting Started (3 Steps)
 
-**For Windows:**
-1. Visit [python.org/downloads](https://www.python.org/downloads/)
-2. Download Python 3.9 or later
-3. Run the installer
-4. **Important:** Check "Add Python to PATH" during installation
-5. Choose "Install for all users" if prompted
-
-**For Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install python3 python3-pip python3-venv
-```
-
-### 2. Verify Python Installation
-
-Open a terminal/command prompt and verify Python is installed correctly:
-
-```bash
-python3 --version
-# Should show Python 3.9.x or later
-
-pip3 --version
-# Should show pip version information
-```
-
-**Note for Windows:** You may need to use `python` and `pip` instead of `python3` and `pip3`.
-
-### 3. Clone or Download the Repository
-
-**Option A - Using Git (Recommended):**
-```bash
-git clone https://github.com/JLopes-Enablon/JiraCSVtoAPI.git
-cd JiraCSVtoAPI
-```
-
-**Option B - Download ZIP:**
-1. Go to the [GitHub repository](https://github.com/JLopes-Enablon/JiraCSVtoAPI)
-2. Click "Code" → "Download ZIP"
-3. Extract the ZIP file and navigate to the folder
-
-### 4. Set Up Virtual Environment
-
-**Create and activate a virtual environment:**
-
-**For macOS/Linux:**
-```bash
-# Navigate to the project directory
-cd JiraCSVtoAPI
-
-# Create virtual environment
-python3 -m venv .venv
-
-# Activate virtual environment
-source .venv/bin/activate
-
-# You should see (.venv) in your terminal prompt
-```
-
-**For Windows:**
-```cmd
-# Navigate to the project directory
-cd JiraCSVtoAPI
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-.venv\Scripts\activate
-
-# You should see (.venv) in your command prompt
-```
-
-### 5. Install Required Packages
-
-With your virtual environment activated, install the required Python packages:
-
-```bash
-pip install -r requirements.txt
-```
-
-This will install:
-- `requests` - For Jira API communication
-- `python-dotenv` - For environment variable management
-- `pytest` - For running tests
-- `pytz` - For timezone handling
-
-### 6. Verify Installation
-
-Test that everything is working correctly:
-
-```bash
-python main.py
-```
-
-You should see the Jira Management Toolkit menu appear. Press `Ctrl+C` or `0` to exit.
-
-### 7. Deactivating the Virtual Environment
-
-When you're done working with the toolkit, you can deactivate the virtual environment:
-
-```bash
-deactivate
-```
-
-### 8. Future Usage
-
-Every time you want to use the toolkit:
-
-1. **Navigate to the project directory:**
+1. **Clone & Setup**
    ```bash
+   git clone https://github.com/JLopes-Enablon/JiraCSVtoAPI.git
    cd JiraCSVtoAPI
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
    ```
 
-2. **Activate the virtual environment:**
-   - **macOS/Linux:** `source .venv/bin/activate`
-   - **Windows:** `.venv\Scripts\activate`
-
-3. **Run the toolkit:**
+2. **Run the Menu System**
    ```bash
    python main.py
    ```
 
-### Troubleshooting
+3. **Follow the Prompts**
+   - Enter your Jira credentials when prompted
+   - Choose your workflow (calendar import, CSV import, etc.)
+   - Let the automation handle the rest!
 
-**Common Issues:**
+### 🎛️ Usage Modes
 
-- **"python: command not found"**: Make sure Python is installed and added to your PATH
-- **"No module named 'requests'"**: Make sure you activated the virtual environment and ran `pip install -r requirements.txt`
-- **Permission errors**: On macOS/Linux, you may need to use `python3` and `pip3` instead of `python` and `pip`
+**Option A: Interactive Menu (Recommended)**
+```bash
+python main.py                    # Simple mode
+python main.py --advanced         # Advanced mode with all options
+```
 
-**Getting Help:**
-If you encounter issues during setup, please check that:
-1. Python 3.9+ is installed and in your PATH
-2. You've activated the virtual environment (you should see `(.venv)` in your prompt)
-3. All requirements are installed (`pip list` should show the required packages)
+**Option B: Direct CSV Import**
+```bash
+python jiraapi.py                 # Direct CSV to Jira import
+python jiraapi.py --prep-outlook  # Outlook calendar import
+```
 
-## Getting Required Jira Variables
+## 📋 Prerequisites
 
-Before using this toolkit, you will need the following Jira variables:
+- **Python 3.9+**
+- **Jira Cloud or Server access**
+- **API Token** (get from [Atlassian Account](https://id.atlassian.com/manage-profile/security/api-tokens))
 
-- **JIRA_URL**: Your Jira Cloud or Server URL (e.g., `https://your-domain.atlassian.net`)
-  - **How to get it:** Log in to your Jira account in your browser. Copy the base URL from your browser's address bar (it will look like `https://your-domain.atlassian.net`).
+## 🔑 Required Jira Information
 
-- **JIRA_EMAIL**: The email address associated with your Jira account
-  - **How to get it:** Click your profile icon in the top right corner of Jira, then select "Profile". Your email address will be shown on your profile page.
+You'll be prompted for these on first run (stored securely in `.env`):
 
-- **JIRA_TOKEN**: A Jira API token
-  - **How to get it:**
-    1. Go to [Jira API tokens page](https://id.atlassian.com/manage-profile/security/api-tokens).
-    2. Click "Create API token".
-    3. Enter a label (e.g., "JiraCSVtoAPI") and click "Create".
-    4. Copy the generated token and save it securely (you will need to paste it into the script prompt).
+- **JIRA_URL**: Your Jira instance URL (e.g., `https://yourcompany.atlassian.net`)
+- **JIRA_EMAIL**: Your Jira account email
+- **JIRA_TOKEN**: API token from Atlassian Account Settings
+- **JIRA_PROJECT_ID**: Project key (e.g., `PROJ`, `DEV`, `CPESG`)
 
-- **JIRA_PROJECT_ID**: The key of your Jira project (e.g., `PROJKEY`)
-  - **How to get it:**
-    1. In Jira, open your project.
-    2. The project key is shown in the project sidebar and in the URL (e.g., `https://your-domain.atlassian.net/jira/software/projects/PROJKEY/boards/1` — here, `PROJKEY` is the project key).
+## 📊 Supported Workflows
 
-- **JIRA_ASSIGNEE** (optional): Username or account ID to assign issues
-  - **How to get it:**
-    1. In Jira, click on your profile icon and select "Profile" to see your username/account ID.
-    2. For other users, go to "People" in the top menu, search for the user, and click their name to view their details.
+### 📥 Import Operations
+- **Calendar Export Import**: Outlook/Teams calendar → Jira work items
+- **CSV Import**: Pre-formatted work item CSV → Jira issues
+- **Bulk Creation**: Stories, tasks, subtasks with custom fields
 
-You will be prompted for these when running the scripts for the first time. They are stored in a `.env` file for future runs.
+### 📝 Update Operations  
+- **Bulk Field Updates**: Update existing issues from CSV
+- **Story Points & Estimates**: Automated field population
+- **Custom Field Defaults**: Automatic application during creation
 
-## Required CSV Format for Input
+### 📤 Export Operations
+- **Issue Export**: Export your Jira issues to CSV
+- **Field Metadata Export**: Export available Jira fields
+- **Bulk Transition**: Move multiple issues through workflows
 
-If you are not importing from and Outlook CSV your input CSV must have the following columns (header row required):
+## 📁 CSV Format Requirements
+
+### Standard Work Item CSV
+```csv
+Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Priority
+PROJ,Example Task,Story,,2024-10-06,5,8h,High
+```
+
+### Outlook Calendar CSV
+```csv
+Subject,Start Date,Start Time,End Time
+Team Meeting,2024-10-06,09:00 AM,10:00 AM
+```
+
+## 🏗️ Project Structure
 
 ```
-Project,Summary,IssueType,Parent,Start Date,Story Points,Original Estimate,Time spent,Priority
+JiraCSVtoAPI/
+├── main.py              # 🎛️ Interactive menu system
+├── jiraapi.py            # ⚙️ Core API engine
+├── README.md             # 📖 Documentation
+├── requirements.txt      # 📦 Dependencies
+├── sample_events.csv     # 📄 Example data
+├── Tools/               # 🔧 Utility scripts
+│   ├── field_check.py
+│   ├── jira_export_my_issues.py
+│   ├── jira_bulk_transition.py
+│   └── Outlook prep.py
+├── tests/               # 🧪 Test scripts
+└── archive/             # 📁 Documentation & examples
 ```
-If you are using an Outlook generated CSV export. this needs to include these fields at a minimum, this will automatically convert the date into the fields above.
+
+## ✨ Key Features
+
+### 🤖 **Automated Custom Fields**
+- Configurable defaults via `.env` file
+- Automatic application during issue creation
+- Support for dropdowns, text fields, and labels
+
+### 🔄 **Smart CSV Processing**
+- Auto-detection of CSV formats
+- Field mapping and validation
+- Error handling and logging
+
+### 📊 **Bulk Operations**
+- Create hundreds of issues in minutes
+- Update existing issues in bulk
+- Transition multiple issues through workflows
+
+### 🛡️ **Security & Reliability**
+- Secure credential storage
+- Comprehensive error handling
+- Detailed logging for troubleshooting
+
+## 🔧 Advanced Usage
+
+### Menu System Options
+```bash
+# Simple mode - essential operations only
+python main.py
+
+# Advanced mode - all features
+python main.py --advanced
 ```
-Subject,Start Date, Start Time, End Time
 
+### Direct API Operations
+```bash
+# Import pre-formatted CSV
+python jiraapi.py
 
-**Notes:**
-- `IssueType` can be `Epic`, `Story`, `Task`, or `Sub-task` (case-insensitive)
-- `Parent` is the parent issue key (for sub-tasks or linked stories)
-- `Start Date` should be in `YYYY-MM-DD` format
-- `Story Points` and `Original Estimate` are optional but recommended (Pending change from Jira admins to be enabled for API)
-- `Created Issue ID` will be filled in by the script after import
+# Import Outlook calendar
+python jiraapi.py --prep-outlook
 
-## Overview
-This toolkit automates the process of importing issues and work items into Jira from CSV files. It supports both pre-formatted work item CSVs and calendar exports (Outlook/Teams), providing scripts for cleaning, mapping, and bulk importing data.
+# Custom field validation
+python Tools/field_check.py
+```
 
-## Features
-- Import pre-formatted Jira work item CSVs
-- Prepare Outlook/Teams calendar exports for Jira import
-- Bulk create issues and sub-tasks in Jira via REST API
-- Update Story Points and Original Estimate fields for Stories
-- Map CSV columns to Jira fields, including custom fields
-- Check and map Jira field metadata
-- Menu-driven workflow for easy selection and execution
+## 🆘 Troubleshooting
 
-## Scripts
-- `main.py`: Main menu and workflow selection
-- `jiraapi.py`: Bulk import and field update logic
-- `Outlook prep.py`: Calendar CSV cleaning and formatting
-- `field_check.py`: Field mapping and metadata check
+### Common Issues
 
-## Usage
-1. Run `main.py` to start the toolkit and select your workflow:
-   - Option 1: Import Calendar Export (Outlook/Teams) to Jira (Default)
-   - Option 2: Import pre-formatted Jira work item CSVs
-2. Follow prompts to clean, map, and import your data.
-3. Use `field_check.py` to verify field mapping if needed.
+**"No module named 'requests'"**
+```bash
+# Ensure virtual environment is activated
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## Requirements
-- Python 3.9+
-- Required packages listed in `requirements.txt`
+**"Authentication failed"**
+- Verify your API token is correct
+- Check if your email matches your Jira account
+- Ensure you have project permissions
 
-## Example CSVs
-- `output.csv`, `June.CSV`, `Outlook.csv`, `mystuff.csv`: Example files for different import workflows
+**"Field not found errors"**
+```bash
+# Check field mappings
+python Tools/field_check.py
+```
 
-## Notes
-- Ensure correct field mapping for custom fields (e.g., Story Points)
-- For calendar exports, run `Outlook prep.py` before importing to Jira
+### Getting Help
 
-## Detailed Functions and Features
+1. **Check logs**: `logs/main_menu.log` and `logs/error.log`
+2. **Validate fields**: Use `Tools/field_check.py` 
+3. **Test connection**: Run `python main.py` and try option 5 (Export)
 
-Below is a detailed overview of the main functions and features provided by this toolkit:
+## 🔄 Custom Field Defaults
 
-### Main Scripts
+The toolkit supports automatic custom field population. Configure defaults in your `.env` file:
 
-- **main.py**
-  - Provides a menu-driven interface for users to select workflows.
-  - Handles user input and launches the appropriate scripts for importing work items or preparing calendar exports.
-  - Ensures a guided, user-friendly experience for bulk operations.
+```env
+# Custom Field Defaults
+FIELD_DIVISION='CP&ESG'
+FIELD_BUSINESS_UNIT='CPESG-Enablon'
+FIELD_TASK_TYPE='General'
+FIELD_IPM_MANAGED='Yes'
+FIELD_LABELS='automation'
+```
 
-- **jiraapi.py**
-  - Core logic for importing issues and sub-tasks into Jira from CSV files.
-  - Handles authentication, environment variable management, and API communication.
-  - Supports bulk creation of issues, sub-tasks, and updates to fields like Story Points and Original Estimate.
-  - Includes error handling, logging, and field mapping logic.
-  - Prompts for required variables and stores them securely in a `.env` file.
+These values are automatically applied when creating new issues.
 
-- **Outlook prep.py**
-  - Cleans and formats Outlook/Teams calendar CSV exports for Jira import.
-  - Normalizes event data, removes unnecessary columns, and outputs a compatible CSV for further processing.
-  - Ensures calendar data is ready for bulk import as work items.
+## 📖 Detailed Documentation
 
-- **field_check.py**
-  - Checks and maps CSV columns to Jira fields, including custom fields.
-  - Helps users verify that their CSV headers match the expected Jira field names and IDs.
-  - Can be used independently to troubleshoot field mapping issues.
+- **Setup Guide**: See Prerequisites section above
+- **CSV Formats**: Check `sample_events.csv` for examples
+- **Tool Scripts**: Individual utilities in `Tools/` folder
+- **Test Suite**: Validation scripts in `tests/` folder
 
-- **jira_field_names_export.py**
-  - Exports all available Jira field metadata to a CSV file.
-  - Useful for advanced users who need to map or reference custom fields in their imports.
+## 🤝 Contributing
 
-- **jira_bulk_transition.py**
-  - Allows bulk transitioning of issues (e.g., moving multiple issues to a new status) via the Jira API.
-  - Can be used after import to update workflow states in bulk.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-- **jira_check_transitions.py**
-  - Checks available transitions for a given Jira issue key.
-  - Helps users understand which workflow states are available for a specific issue.
+## 📄 License
 
-- **jira_export_my_issues.py**
-  - Exports all issues assigned to or reported by the current user to a local CSV file.
-  - Useful for backup, reporting, or further processing.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Key Features
+## 🙋‍♂️ Support
 
-- **Bulk Import**: Import multiple issues and sub-tasks from a single CSV file, reducing manual entry and errors.
-- **Calendar Integration**: Prepare and import Outlook/Teams calendar events as Jira work items, streamlining time tracking and reporting.
-- **Field Mapping**: Map CSV columns to Jira fields, including support for custom fields and field validation.
-- **Menu-Driven Workflow**: User-friendly menu system for selecting and executing workflows without needing to remember script names or arguments.
-- **Environment Management**: Securely prompts for and stores Jira credentials and configuration in a `.env` file, keeping sensitive data out of source code.
-- **Error Handling & Logging**: Comprehensive error messages and logging to help diagnose issues during import or API operations.
-- **Transition Management**: Bulk transition issues to new workflow states, and check available transitions for any issue.
-- **Export Capabilities**: Export your own issues from Jira for backup, migration, or analysis.
+For questions or support, please open an issue in the GitHub repository.
 
-### Helper and Test Scripts
+---
 
-- **test_fixes.py**: Contains tests for field update logic, ensuring Story Points and Original Estimate updates work as expected.
-- **fix_field_updates.py**: Utility for testing and fixing field update behaviors in Jira.
-
-### File Structure Notes
-
-- **output.csv, Outlook.csv, June.CSV, mystuff.csv**: Example and output files for different workflows.
-- **.env**: Stores Jira credentials and configuration (excluded from version control).
-- **requirements.txt**: Lists all required Python packages for the toolkit.
-- **.gitignore**: Ensures sensitive and output files are not committed to version control.
-
-For more details on each script, see the inline comments and docstrings within the codebase.
-For help feel free to teach out.
+**🎯 Ready to automate your Jira workflow? Start with `python main.py`!**
