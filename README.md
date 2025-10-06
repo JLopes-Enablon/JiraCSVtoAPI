@@ -188,15 +188,15 @@ python Tools/field_check.py
 The toolkit supports automatic custom field population. Configure defaults in your `.env` file:
 
 ```env
-# Custom Field Defaults
-FIELD_DIVISION='CP&ESG'
-FIELD_BUSINESS_UNIT='CPESG-Enablon'
-FIELD_TASK_TYPE='General'
-FIELD_IPM_MANAGED='Yes'
-FIELD_LABELS='automation'
+# Custom Field Defaults - Example format
+FIELD_DIVISION='YourDivisionValue'
+FIELD_BUSINESS_UNIT='YourBusinessUnitValue'
+FIELD_TASK_TYPE='YourTaskTypeValue'
+FIELD_IPM_MANAGED='Yes/No'
+FIELD_LABELS='your,labels,here'
 ```
 
-These values are automatically applied when creating new issues.
+These values are automatically applied when creating new issues. Replace the example values with your organization's specific field values.
 
 ## 📖 Detailed Documentation
 
